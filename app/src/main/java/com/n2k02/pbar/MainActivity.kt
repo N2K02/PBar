@@ -1,13 +1,11 @@
 package com.n2k02.pbar
 
-import android.app.DownloadManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
-import android.os.Environment
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,20 +34,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), UPDATES("Updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppUpdater.init(this, "N2K02/PBar", "PBar")
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         val legacy = prefs.edit().putBoolean("overlay_enabled", true).putString("style", "line")
         prefs.all.forEach { (key, value) ->
@@ -76,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppUpdater.onResume(this)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("overlay_enabled", true).apply()
         if (Settings.canDrawOverlays(this)) {
@@ -580,122 +572,7 @@ class MainActivity : ComponentActivity() {
                             Text("Unlike a global on/off switch, app filtering lets downloads and media from your preferred apps remain visible while unwanted sources stay hidden.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Tab.UPDATES -> {
-                            Text("App updates", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("PBar", style = MaterialTheme.typography.titleLarge)
-                                    Text("Installed version: ${BuildConfig.VERSION_NAME}")
-                                    Text(updateMessage, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Button(
-                                        enabled = !checking,
-                                        onClick = {
-                                            checking = true
-                                            updateMessage = "Checking GitHub Releases…"
-                                            lifecycleScope.launch {
-                                                val result = withContext(Dispatchers.IO) {
-                                                    runCatching {
-                                                        val connection = URL("https://api.github.com/repos/N2K02/PBar/releases/latest").openConnection() as HttpURLConnection
-                                                        connection.connectTimeout = 10000
-                                                        connection.readTimeout = 15000
-                                                        try {
-                                                            connection.setRequestProperty("Accept", "application/vnd.github+json")
-                                                            if (connection.responseCode == 404) null else {
-                                                                if (connection.responseCode != 200) error("GitHub returned HTTP ${connection.responseCode}")
-                                                                val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-                                                                val tag = json.optString("tag_name")
-                                                                val asset = (0 until (json.optJSONArray("assets")?.length() ?: 0)).map { json.getJSONArray("assets").getJSONObject(it) }.firstOrNull { it.optString("name").endsWith(".apk", true) }
-                                                                Triple(tag.removePrefix("v"), asset?.optString("browser_download_url"), json.optString("html_url"))
-                                                            }
-                                                        } finally { connection.disconnect() }
-                                                    }
-                                                }
-                                                result.onSuccess { release ->
-                                                    if (release == null) updateMessage = "No public release is available yet."
-                                                    else {
-                                                        latestVersion = release.first
-                                                        apkUrl = release.second
-                                                        releaseUrl = release.third
-                                                        updateMessage = if (release.first == BuildConfig.VERSION_NAME) "You're up to date." else "Latest release: ${release.first}. Open the release to download and install it."
-                                                    }
-                                                }.onFailure { updateMessage = "Couldn't check for updates. Check your connection and try again." }
-                                                checking = false
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    , shapes = ButtonDefaults.shapes()) { Icon(Icons.Default.Download, null); Spacer(Modifier.width(8.dp)); Text(if (checking) "Checking…" else "Check for updates") }
-                                    if (latestVersion != null && latestVersion != BuildConfig.VERSION_NAME) {
-                                        Button(
-                                            enabled = !downloading && apkUrl != null,
-                                            onClick = {
-                                                val url = apkUrl ?: return@Button
-                                                lifecycleScope.launch {
-                                                    downloading = true
-                                                    downloadProgress = 0
-                                                    downloadedUri = null
-                                                    try {
-                                                        val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-                                                        val request = DownloadManager.Request(Uri.parse(url))
-                                                            .setTitle("PBar $latestVersion")
-                                                            .setDescription("Downloading app update")
-                                                            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                                            .setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, "PBar-$latestVersion.apk")
-                                                        val id = manager.enqueue(request)
-                                                        var finished = false
-                                                        while (!finished) {
-                                                            val cursor = manager.query(DownloadManager.Query().setFilterById(id))
-                                                            cursor.use {
-                                                                if (!it.moveToFirst()) error("Download could not be found.")
-                                                                when (it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
-                                                                    DownloadManager.STATUS_SUCCESSFUL -> {
-                                                                        downloadedUri = manager.getUriForDownloadedFile(id) ?: error("Downloaded APK is unavailable.")
-                                                                        downloadProgress = 100
-                                                                        finished = true
-                                                                    }
-                                                                    DownloadManager.STATUS_FAILED -> {
-                                                                        val reason = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                                                                        error("Download failed (code $reason).")
-                                                                    }
-                                                                    else -> {
-                                                                        val done = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                                                                        val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                                                                        if (total > 0) downloadProgress = ((done * 100) / total).toInt().coerceIn(0, 100)
-                                                                    }
-                                                                }
-                                                            }
-                                                            if (!finished) delay(500)
-                                                        }
-                                                        updateMessage = "Download complete. Install the update when ready."
-                                                    } catch (e: Exception) {
-                                                        updateMessage = e.message ?: "Download failed. Please try again."
-                                                    } finally {
-                                                        downloading = false
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        , shapes = ButtonDefaults.shapes()) { Text(if (downloading) "Downloading $downloadProgress%" else "Download version $latestVersion") }
-                                        if (downloading) {
-                                            LinearProgressIndicator(progress = { downloadProgress / 100f }, modifier = Modifier.fillMaxWidth())
-                                        }
-                                        val installUri = downloadedUri
-                                    if (installUri != null) {
-                                            Button(
-                                                onClick = {
-                                                    if (!packageManager.canRequestPackageInstalls()) {
-                                                        startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
-                                                    } else {
-                                                        startActivity(Intent(Intent.ACTION_VIEW)
-                                                            .setDataAndType(installUri, "application/vnd.android.package-archive")
-                                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-                                                    }
-                                                },
-                                                modifier = Modifier.fillMaxWidth()
-                                            , shapes = ButtonDefaults.shapes()) { Text("Install update") }
-                                        }
-                                    }
-                                    OutlinedButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl))) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("View GitHub release") }
-                                }
-                            }
+                            UpdatesPage(modifier = Modifier.fillMaxWidth())
                         }
                     }
                     Spacer(Modifier.height(8.dp))
