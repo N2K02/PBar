@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -452,6 +453,11 @@ class MainActivity : ComponentActivity() {
                                         }.sortedBy { it.second.lowercase() }
                                         detectedApps.forEach { (packageName, label) ->
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                val appIcon = remember(packageName) { loadAppIcon(packageManager, packageName) }
+                                                if (appIcon != null) {
+                                                    Image(bitmap = appIcon, contentDescription = null, modifier = Modifier.size(44.dp))
+                                                    Spacer(Modifier.width(12.dp))
+                                                }
                                                 Column(Modifier.weight(1f)) {
                                                     var advancedExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
@@ -467,7 +473,6 @@ class MainActivity : ComponentActivity() {
                                                     var appRingOffsetX by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)) }
                                                     var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)) }
                                                     Text(label, style = MaterialTheme.typography.titleMedium)
-                                                    Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
