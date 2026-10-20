@@ -98,8 +98,8 @@ class FloatingIndicatorService : Service() {
         val vertical = !isRing && prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
         val ringSize = prefs.getInt("app_${sourcePackage}_ring_size", prefs.getInt("ring_size", 68)).coerceIn(40, 120)
-        val ringOffsetX = prefs.getInt("ring_offset_x", 0).coerceIn(-150, 150)
-        val ringOffsetY = prefs.getInt("ring_offset_y", 28).coerceIn(0, 160)
+        val ringOffsetX = prefs.getInt("app_${sourcePackage}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)
+        val ringOffsetY = prefs.getInt("app_${sourcePackage}_ring_offset_y", prefs.getInt("ring_offset_y", 28)).coerceIn(0, 160)
         val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
         val params = WindowManager.LayoutParams(
             when { isRing -> dp(ringSize); vertical -> dp(thickness); else -> WindowManager.LayoutParams.MATCH_PARENT },
