@@ -79,7 +79,8 @@ class ProgressNotificationListener : NotificationListenerService() {
             prefs.getBoolean("show_for_media", true) &&
                 !isIgnoredPackage(controller.packageName) && when (controller.playbackState?.state) {
                 PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
-                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
+                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING,
+                PlaybackState.STATE_PAUSED -> true
                 else -> false
             }
         }
@@ -100,6 +101,8 @@ class ProgressNotificationListener : NotificationListenerService() {
             prefs.edit()
                 .putBoolean("has_signal", true)
                 .putBoolean("signal_media", true)
+                .putBoolean("signal_playing", state?.state == PlaybackState.STATE_PLAYING || state?.state == PlaybackState.STATE_FAST_FORWARDING || state?.state == PlaybackState.STATE_REWINDING)
+                .putFloat("signal_speed", state?.playbackSpeed ?: 1f)
                 .putBoolean("signal_timer", false)
                 .putBoolean("signal_download", false)
                 .putBoolean("signal_indeterminate", duration <= 0L)
