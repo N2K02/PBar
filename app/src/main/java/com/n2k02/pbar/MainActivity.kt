@@ -54,6 +54,11 @@ class MainActivity : ComponentActivity() {
             val editor = prefs.edit().putBoolean("camera_ring_defaults_v2", true)
             if (prefs.getInt("ring_size", 68) == 68) editor.putInt("ring_size", 36)
             if (prefs.getInt("ring_offset_y", 28) == 28) editor.putInt("ring_offset_y", 0)
+            // Migrate only untouched legacy per-app defaults; preserve user-tuned values.
+            prefs.all.forEach { (key, value) ->
+                if (key.startsWith("app_") && key.endsWith("_ring_size") && value == 68) editor.putInt(key, 36)
+                if (key.startsWith("app_") && key.endsWith("_ring_offset_y") && value == 28) editor.putInt(key, 0)
+            }
             editor.apply()
         }
         setContent { PBarApp() }
@@ -475,11 +480,11 @@ class MainActivity : ComponentActivity() {
                                                         Slider(value = appThickness.toFloat(), onValueChange = { appThickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("app_${packageName}_thickness", appThickness).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..12f, steps = 9)
                                                         if (appStyle == "ring") {
                                                             Text("Ring size: $appRingSize dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingSize.toFloat(), onValueChange = { appRingSize = it.toInt().coerceIn(24, 80); prefs.edit().putInt("app_${packageName}_ring_size", appRingSize).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 40f..120f, steps = 39)
+                                                            Slider(value = appRingSize.toFloat(), onValueChange = { appRingSize = it.toInt().coerceIn(24, 80); prefs.edit().putInt("app_${packageName}_ring_size", appRingSize).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 24f..80f, steps = 55)
                                                             Text("Camera X offset: $appRingOffsetX dp", style = MaterialTheme.typography.bodySmall)
                                                             Slider(value = appRingOffsetX.toFloat(), onValueChange = { appRingOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("app_${packageName}_ring_offset_x", appRingOffsetX).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = -150f..150f, steps = 59)
                                                             Text("Camera Y offset: $appRingOffsetY dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingOffsetY.toFloat(), onValueChange = { appRingOffsetY = it.toInt().coerceIn(0, 80); prefs.edit().putInt("app_${packageName}_ring_offset_y", appRingOffsetY).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 0f..160f, steps = 39)
+                                                            Slider(value = appRingOffsetY.toFloat(), onValueChange = { appRingOffsetY = it.toInt().coerceIn(0, 80); prefs.edit().putInt("app_${packageName}_ring_offset_y", appRingOffsetY).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 0f..80f, steps = 39)
                                                             Text("Ring stroke: $appRingStroke dp", style = MaterialTheme.typography.bodySmall)
                                                             Slider(value = appRingStroke.toFloat(), onValueChange = { appRingStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("app_${packageName}_ring_stroke", appRingStroke).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..10f, steps = 7)
                                                         }
