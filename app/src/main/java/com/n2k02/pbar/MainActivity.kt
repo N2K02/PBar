@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material3.*
+import androidx.compose.material3.*\nimport androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
         var updateMessage by remember { mutableStateOf("Check GitHub for the latest PBar release.") }
         var checking by remember { mutableStateOf(false) }
 
-        MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+        MaterialExpressiveTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
             Scaffold(
                 contentWindowInsets = WindowInsets.safeDrawing,
                 topBar = {
