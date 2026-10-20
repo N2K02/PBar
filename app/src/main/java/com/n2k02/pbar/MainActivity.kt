@@ -324,6 +324,14 @@ class MainActivity : ComponentActivity() {
                                         detectedApps.forEach { (packageName, label) ->
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                                 Column(Modifier.weight(1f)) {
+                                                    var advancedExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
+                                                    var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
+                                                    var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
+                                                    var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", 4).coerceIn(2, 12)) }
                                                     Text(label, style = MaterialTheme.typography.titleMedium)
                                                     Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -344,14 +352,6 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                         TextButton(onClick = { advancedExpanded = !advancedExpanded }) { Text(if (advancedExpanded) "Less" else "Customize") }
                                                     }
-                                                    var advancedExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
-                                                    var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
-                                                    var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
-                                                    var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", 4).coerceIn(2, 12)) }
                                                     if (advancedExpanded) {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Style", modifier = Modifier.weight(1f))
