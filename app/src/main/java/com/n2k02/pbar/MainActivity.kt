@@ -171,7 +171,14 @@ class MainActivity : ComponentActivity() {
                                         Switch(checked = appColor, onCheckedChange = { appColor = it; prefs.edit().putBoolean("app_color", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
                                     }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
-                                    listOf("top" to "Top edge", "camera" to "Near camera", "bottom" to "Bottom edge").forEach { (value, label) ->
+                                    val positionOptions = if (style == "ring") {
+                                        listOf("top" to "Top centre", "camera" to "Near camera", "bottom" to "Bottom centre")
+                                    } else if (orientation == "vertical") {
+                                        listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
+                                    } else {
+                                        listOf("top" to "Top edge", "camera" to "Near camera", "bottom" to "Bottom edge")
+                                    }
+                                    positionOptions.forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             RadioButton(selected = position == value, onClick = { position = value; prefs.edit().putString("position", value).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
                                             Text(label)
