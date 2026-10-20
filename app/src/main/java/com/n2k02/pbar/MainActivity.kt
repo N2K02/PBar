@@ -1,6 +1,7 @@
 package com.n2k02.pbar
 
 import android.app.DownloadManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
@@ -64,6 +65,15 @@ class MainActivity : ComponentActivity() {
         }
         setContent { PBarApp() }
         if (getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("overlay_enabled", false) && Settings.canDrawOverlays(this)) {
+            startService(Intent(this, FloatingIndicatorService::class.java))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        prefs.edit().putBoolean("overlay_enabled", true).apply()
+        if (Settings.canDrawOverlays(this)) {
             startService(Intent(this, FloatingIndicatorService::class.java))
         }
     }
