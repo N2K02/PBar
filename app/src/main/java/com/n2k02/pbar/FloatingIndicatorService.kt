@@ -97,7 +97,7 @@ class FloatingIndicatorService : Service() {
         val isRing = prefs.getString("app_${sourcePackage}_style", prefs.getString("style", "line")) == "ring"
         val vertical = !isRing && prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
-        val ringSize = prefs.getInt("ring_size", 68).coerceIn(40, 120)
+        val ringSize = prefs.getInt("app_${sourcePackage}_ring_size", prefs.getInt("ring_size", 68)).coerceIn(40, 120)
         val ringOffsetX = prefs.getInt("ring_offset_x", 0).coerceIn(-150, 150)
         val ringOffsetY = prefs.getInt("ring_offset_y", 28).coerceIn(0, 160)
         val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
@@ -203,6 +203,7 @@ class FloatingIndicatorService : Service() {
                 paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 val label = if (media) "♫" else if (signal && !indeterminate) "$progress%" else "•"
                 canvas.drawText(label, width / 2f, height / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
+                if (signal && indeterminate) postInvalidateDelayed(32L)
             } else {
                 paint.style = Paint.Style.FILL
                 paint.color = Color.argb(opacity * 80 / 255, 150, 150, 150)
