@@ -83,7 +83,7 @@ class FloatingIndicatorService : Service() {
     private fun render() {
         if (!Settings.canDrawOverlays(this)) return
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        if (!prefs.getBoolean("overlay_enabled", false)) { removeOverlay(); return }
+        if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false)) { removeOverlay(); return }
         val isRing = prefs.getString("style", "line") == "ring"
         val params = WindowManager.LayoutParams(
             if (isRing) dp(68) else WindowManager.LayoutParams.MATCH_PARENT,
