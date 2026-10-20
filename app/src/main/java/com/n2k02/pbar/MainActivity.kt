@@ -275,9 +275,21 @@ class MainActivity : ComponentActivity() {
                                                 checked = enabled,
                                                 onCheckedChange = { value ->
                                                     when (label) {
-                                                        "Downloads and transfers" -> { showForDownloads = value; prefs.edit().putBoolean("show_for_downloads", value).apply() }
-                                                        "Music and media" -> { showForMedia = value; prefs.edit().putBoolean("show_for_media", value).apply() }
-                                                        else -> { showForTimers = value; prefs.edit().putBoolean("show_for_timers", value).apply() }
+                                                        "Downloads and transfers" -> {
+                                                            showForDownloads = value
+                                                            prefs.edit().putBoolean("show_for_downloads", value).apply()
+                                                            if (!value && prefs.getBoolean("signal_download", false)) prefs.edit().putBoolean("has_signal", false).apply()
+                                                        }
+                                                        "Music and media" -> {
+                                                            showForMedia = value
+                                                            prefs.edit().putBoolean("show_for_media", value).apply()
+                                                            if (!value && prefs.getBoolean("signal_media", false)) prefs.edit().putBoolean("has_signal", false).apply()
+                                                        }
+                                                        else -> {
+                                                            showForTimers = value
+                                                            prefs.edit().putBoolean("show_for_timers", value).apply()
+                                                            if (!value && prefs.getBoolean("signal_timer", false)) prefs.edit().putBoolean("has_signal", false).putBoolean("signal_timer", false).apply()
+                                                        }
                                                     }
                                                     sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
                                                 }
