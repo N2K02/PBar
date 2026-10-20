@@ -94,6 +94,8 @@ class ProgressNotificationListener : NotificationListenerService() {
             prefs.edit()
                 .putBoolean("has_signal", true)
                 .putBoolean("signal_media", true)
+                .putBoolean("signal_timer", false)
+                .putBoolean("signal_download", false)
                 .putBoolean("signal_indeterminate", duration <= 0L)
                 .putInt("signal_progress", percent)
                 .putLong("signal_duration", duration)
@@ -109,7 +111,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         } else {
             val notificationSignal = activeNotifications.orEmpty().any { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
             if (!notificationSignal) {
-                prefs.edit().putBoolean("has_signal", false).putBoolean("signal_media", false).putInt("signal_progress", 0).apply()
+                prefs.edit().putBoolean("has_signal", false).putBoolean("signal_media", false).putBoolean("signal_timer", false).putBoolean("signal_download", false).putInt("signal_progress", 0).apply()
                 sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             }
         }
@@ -187,6 +189,7 @@ class ProgressNotificationListener : NotificationListenerService() {
             .putBoolean("has_signal", true)
             .putBoolean("signal_media", media && !hasProgress && !timer)
             .putBoolean("signal_timer", timer)
+            .putBoolean("signal_download", !media && !timer && hasProgress)
             .putBoolean("signal_indeterminate", indeterminate)
             .putInt("signal_progress", percent)
             .putInt("signal_color", n.color)
@@ -265,7 +268,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         val remaining = activeNotifications.orEmpty().filter { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (remaining.isEmpty()) {
-            prefs.edit().putBoolean("has_signal", false).putInt("signal_progress", 0).putBoolean("signal_media", false).putBoolean("signal_timer", false).apply()
+            prefs.edit().putBoolean("has_signal", false).putInt("signal_progress", 0).putBoolean("signal_media", false).putBoolean("signal_timer", false).putBoolean("signal_download", false).apply()
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
         } else {
             remaining.forEach(::consume)
