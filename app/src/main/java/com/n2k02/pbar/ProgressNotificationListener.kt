@@ -46,11 +46,16 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
+        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        prefs.edit().putBoolean("diagnostic_listener_connected", true)
+            .putLong("diagnostic_listener_connected_at", System.currentTimeMillis()).apply()
         activeNotifications?.forEach(::consume)
         mediaSessions = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         runCatching {
             mediaSessions.addOnActiveSessionsChangedListener(sessionsChanged, ComponentName(this, ProgressNotificationListener::class.java))
             refreshMediaSessions(mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java)))
+        }.onFailure { error ->
+            prefs.edit().putString("diagnostic_session_error", error.javaClass.simpleName + ": " + (error.message ?: "no details")).apply()
         }
     }
 
@@ -75,6 +80,17 @@ class ProgressNotificationListener : NotificationListenerService() {
         }
         controllers.forEach { rememberSourcePackage(it.packageName) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        val sessionSummary = controllers.take(8).joinToString(" | ") { controller ->
+            val state = controller.playbackState
+            val duration = controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+            controller.packageName + ":" + (state?.state?.toString() ?: "no-state") + ":" + duration + "ms"
+        }.ifBlank { "No active media sessions returned by Android" }
+        prefs.edit()
+            .putInt("diagnostic_session_count", controllers.size)
+            .putString("diagnostic_session_summary", sessionSummary)
+            .putString("diagnostic_session_error", "")
+            .putLong("diagnostic_last_session_check", System.currentTimeMillis())
+            .apply()
         // Only active playback should create a media progress overlay. A paused
         // media session often remains registered for a long time after playback stops.
         val playingCandidates = controllers.filter { controller ->
@@ -162,6 +178,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         progressHandler.removeCallbacks(progressTicker)
         stopTimerTicker()
         if (::mediaSessions.isInitialized) runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
+        getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("diagnostic_listener_connected", false).apply()
         super.onDestroy()
     }
 
