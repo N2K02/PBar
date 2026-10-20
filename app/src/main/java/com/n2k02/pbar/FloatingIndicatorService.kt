@@ -178,7 +178,11 @@ class FloatingIndicatorService : Service() {
                 .firstOrNull { it.startsWith("$sourcePackage=") }
                 ?.substringAfter("=")
                 ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
-            val primary = appOverride ?: if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor else fallbackColor
+            val customColor = prefs.getString("indicator_custom_color", null)
+                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+            val primary = appOverride
+                ?: if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor
+                else customColor ?: fallbackColor
             val tertiary = Color.rgb(0, 150, 136)
             val opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
             val rounded = prefs.getBoolean("rounded_corners", true)
