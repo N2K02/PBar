@@ -328,14 +328,6 @@ class MainActivity : ComponentActivity() {
                                                     Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                        var advancedExpanded by remember(packageName) { mutableStateOf(false) }
-                                                        var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                        var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                        var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                        var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
-                                                        var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
-                                                        var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
-                                                        var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", 4).coerceIn(2, 12)) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: "Automatic"
                                                         TextButton(onClick = { colorMenuExpanded = true }) { Text("Colour: $currentColorName") }
                                                         DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
