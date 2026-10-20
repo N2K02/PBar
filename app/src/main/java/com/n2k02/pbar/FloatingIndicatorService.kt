@@ -92,12 +92,14 @@ class FloatingIndicatorService : Service() {
             removeOverlay()
             return
         }
-        val isRing = prefs.getString("style", "line") == "ring"
-        val vertical = !isRing && prefs.getString("orientation", "horizontal") == "vertical"
-        val thickness = prefs.getInt("thickness", 4).coerceIn(2, 12)
+        val sourcePackage = prefs.getString("signal_package", "").orEmpty()
+        val isRing = prefs.getString("app_${sourcePackage}_style", prefs.getString("style", "line")) == "ring"
+        val vertical = !isRing && prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
+        val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
         val ringSize = prefs.getInt("ring_size", 68).coerceIn(40, 120)
         val ringOffsetX = prefs.getInt("ring_offset_x", 0).coerceIn(-150, 150)
         val ringOffsetY = prefs.getInt("ring_offset_y", 28).coerceIn(0, 160)
+        val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
         val params = WindowManager.LayoutParams(
             when { isRing -> dp(ringSize); vertical -> dp(thickness); else -> WindowManager.LayoutParams.MATCH_PARENT },
             when { isRing -> dp(ringSize); vertical -> WindowManager.LayoutParams.MATCH_PARENT; else -> dp(thickness) },
@@ -109,13 +111,13 @@ class FloatingIndicatorService : Service() {
             android.graphics.PixelFormat.TRANSLUCENT
         ).apply {
             gravity = if (vertical) {
-                when (prefs.getString("position", "left")) {
+                when (appPosition) {
                     "right" -> Gravity.RIGHT or Gravity.CENTER_VERTICAL
                     "center" -> Gravity.CENTER
                     else -> Gravity.LEFT or Gravity.CENTER_VERTICAL
                 }
             } else {
-                when (prefs.getString("position", "top")) {
+                when (appPosition) {
                     "bottom" -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
                     "camera" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
                     else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -144,6 +146,7 @@ class FloatingIndicatorService : Service() {
         private var media = false
         private var signal = false
         private var sourceColor = 0
+        private var sourcePackage = ""
 
         fun updateFrom(prefs: android.content.SharedPreferences) {
             progress = prefs.getInt("signal_progress", 0).coerceIn(0, 100)
@@ -151,6 +154,7 @@ class FloatingIndicatorService : Service() {
             media = prefs.getBoolean("signal_media", false)
             signal = prefs.getBoolean("has_signal", false)
             sourceColor = prefs.getInt("signal_color", 0)
+            sourcePackage = prefs.getString("signal_package", "").orEmpty()
             invalidate()
         }
 
@@ -163,21 +167,22 @@ class FloatingIndicatorService : Service() {
             } else Color.rgb(103, 80, 164)
             val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
             val appColorEnabled = prefs.getBoolean("app_color", true)
-            val sourcePackage = prefs.getString("signal_package", "").orEmpty()
             val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
                 .firstOrNull { it.startsWith("$sourcePackage=") }
                 ?.substringAfter("=")
                 ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
             val primary = appOverride ?: if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor else fallbackColor
             val tertiary = Color.rgb(0, 150, 136)
+            val opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
+            val rounded = prefs.getBoolean("rounded_corners", true)
             if (ring) {
-                val stroke = 4.5f * density
+                val stroke = prefs.getInt("ring_stroke", 5).coerceIn(2, 10) * density
                 val inset = stroke
                 bounds.set(inset, inset, width - inset, height - inset)
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = stroke
                 paint.strokeCap = Paint.Cap.ROUND
-                paint.color = Color.argb(225, 240, 238, 246)
+                paint.color = Color.argb(opacity * 225 / 255, 240, 238, 246)
                 canvas.drawArc(bounds, 0f, 360f, false, paint)
                 if (signal) {
                     paint.color = if (media) tertiary else primary
@@ -196,16 +201,19 @@ class FloatingIndicatorService : Service() {
                 canvas.drawText(label, width / 2f, height / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
             } else {
                 paint.style = Paint.Style.FILL
-                paint.color = Color.argb(80, 150, 150, 150)
-                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+                paint.color = Color.argb(opacity * 80 / 255, 150, 150, 150)
+                if (rounded) canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), height / 2f, height / 2f, paint)
+                else canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
                 if (signal) {
                     paint.color = if (media) tertiary else primary
                     if (width < height) {
                         val segment = if (indeterminate) height * 0.35f else height * progress / 100f
-                        canvas.drawRect(0f, height - segment, width.toFloat(), height.toFloat(), paint)
+                        if (rounded) canvas.drawRoundRect(0f, height - segment, width.toFloat(), height.toFloat(), width / 2f, width / 2f, paint)
+                        else canvas.drawRect(0f, height - segment, width.toFloat(), height.toFloat(), paint)
                     } else {
                         val segment = if (indeterminate) width * 0.12f else width * progress / 100f
-                        canvas.drawRect(0f, 0f, segment, height.toFloat(), paint)
+                        if (rounded) canvas.drawRoundRect(0f, 0f, segment, height.toFloat(), height / 2f, height / 2f, paint)
+                        else canvas.drawRect(0f, 0f, segment, height.toFloat(), paint)
                     }
                 }
             }
