@@ -1,10 +1,15 @@
 package com.n2k02.pbar
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -36,7 +41,8 @@ class FloatingIndicatorService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) { render() }
     }
 
-    @Suppress("DEPRECATION")\n    override fun onCreate() {
+    @Suppress("DEPRECATION")
+    override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL), RECEIVER_NOT_EXPORTED)
@@ -46,8 +52,32 @@ class FloatingIndicatorService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!Settings.canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
+        startAsForeground()
         render()
         return START_STICKY
+    }
+
+    private fun startAsForeground() {
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "PBar indicator", NotificationManager.IMPORTANCE_LOW))
+        }
+        val openApp = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = Notification.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("PBar is active")
+            .setContentText("Floating progress indicator is enabled")
+            .setContentIntent(openApp)
+            .setOngoing(true)
+            .build()
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(FOREGROUND_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(FOREGROUND_ID, notification)
+        }
     }
 
     private fun render() {
@@ -123,4 +153,9 @@ class FloatingIndicatorService : Service() {
         super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        private const val CHANNEL_ID = "pbar_indicator"
+        private const val FOREGROUND_ID = 1204
+    }
 }
