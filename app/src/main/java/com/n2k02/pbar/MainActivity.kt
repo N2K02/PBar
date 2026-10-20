@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent { PBarApp() }
         if (getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("overlay_enabled", false) && Settings.canDrawOverlays(this)) {
-            startService(Intent(this, FloatingIndicatorService::class.java))
+            refreshOverlay()
         }
     }
 
@@ -70,13 +70,18 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("overlay_enabled", true).apply()
         if (Settings.canDrawOverlays(this)) {
-            startService(Intent(this, FloatingIndicatorService::class.java))
+            refreshOverlay()
         }
+    }
+
+    /** Ask the overlay (hosted by the notification listener) to re-read settings and redraw. */
+    private fun refreshOverlay() {
+        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(packageName))
     }
 
     private fun quitPBar() {
         getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("overlay_enabled", false).apply()
-        stopService(Intent(this, FloatingIndicatorService::class.java))
+        refreshOverlay()
         finishAndRemoveTask()
     }
 
@@ -226,7 +231,7 @@ class MainActivity : ComponentActivity() {
                                         Text(if (listenerReady) "Ready" else "Needed", style = MaterialTheme.typography.labelMedium)
                                     }
                                     if (!listenerReady) {
-                                        OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                        Button(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                             Text("Grant notification access")
                                         }
                                     }
@@ -264,7 +269,7 @@ class MainActivity : ComponentActivity() {
                                     if (signalUpdated > 0L) {
                                         Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    OutlinedButton(onClick = { refreshSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                    Button(onClick = { refreshSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Refresh status")
                                     }
                                 }
@@ -274,8 +279,8 @@ class MainActivity : ComponentActivity() {
                                     Text("Make it yours", style = MaterialTheme.typography.titleLarge)
                                     Text("Change bar position, orientation, thickness, colour, opacity, and corner style in Appearance. Choose which apps PBar watches in Apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(onClick = { tab = Tab.STYLE }, shapes = ButtonDefaults.shapes()) { Text("Appearance") }
-                                        OutlinedButton(onClick = { tab = Tab.APPS }, shapes = ButtonDefaults.shapes()) { Text("Choose apps") }
+                                        Button(onClick = { tab = Tab.STYLE }, shapes = ButtonDefaults.shapes()) { Text("Appearance") }
+                                        Button(onClick = { tab = Tab.APPS }, shapes = ButtonDefaults.shapes()) { Text("Choose apps") }
                                     }
                                 }
                             }
@@ -283,7 +288,7 @@ class MainActivity : ComponentActivity() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Quit PBar", style = MaterialTheme.typography.titleLarge)
                                     Text("Stops the floating progress bar and closes PBar. Open PBar again to resume automatic tracking.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    OutlinedButton(onClick = { quitPBar() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                    Button(onClick = { quitPBar() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Quit PBar")
                                     }
                                 }
@@ -298,17 +303,17 @@ class MainActivity : ComponentActivity() {
                                     Text("Bar only — ring mode has been removed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Orientation", style = MaterialTheme.typography.titleMedium)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Horizontal") })
-                                        FilterChip(selected = orientation == "vertical", onClick = { orientation = "vertical"; if (position !in listOf("left", "center", "right")) position = "left"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Vertical") })
+                                        FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Horizontal") })
+                                        FilterChip(selected = orientation == "vertical", onClick = { orientation = "vertical"; if (position !in listOf("left", "center", "right")) position = "left"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Vertical") })
                                     }
                                     Text("Thickness: $thickness dp", style = MaterialTheme.typography.titleMedium)
-                                    Slider(value = thickness.toFloat(), onValueChange = { thickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("thickness", thickness).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 2f..12f, steps = 9)
+                                    Slider(value = thickness.toFloat(), onValueChange = { thickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("thickness", thickness).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 2f..12f, steps = 9)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Use app colour", style = MaterialTheme.typography.titleMedium)
                                             Text("Uses the source notification's colour when available. A custom colour is used when no source colour is available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                        Switch(checked = appColor, onCheckedChange = { appColor = it; prefs.edit().putBoolean("app_color", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
+                                        Switch(checked = appColor, onCheckedChange = { appColor = it; prefs.edit().putBoolean("app_color", it).apply(); if (overlayEnabled) refreshOverlay() })
                                     }
                                     OutlinedTextField(
                                         value = customColorHex,
@@ -318,14 +323,14 @@ class MainActivity : ComponentActivity() {
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    OutlinedButton(onClick = {
+                                    Button(onClick = {
                                         val normalized = if (customColorHex.startsWith("#")) customColorHex else "#$customColorHex"
                                         val valid = runCatching { android.graphics.Color.parseColor(normalized) }.isSuccess
                                         if (valid) {
                                             customColorHex = normalized
                                             prefs.edit().putString("indicator_custom_color", normalized).apply()
                                             customColorMessage = "Saved"
-                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                            if (overlayEnabled) refreshOverlay()
                                         } else customColorMessage = "Enter a valid hex colour, such as #8B5CF6"
                                     }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Apply custom colour") }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
@@ -336,7 +341,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                     positionOptions.forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            RadioButton(selected = position == value, onClick = { position = value; prefs.edit().putString("position", value).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
+                                            RadioButton(selected = position == value, onClick = { position = value; prefs.edit().putString("position", value).apply(); if (overlayEnabled) refreshOverlay() })
                                             Text(label)
                                         }
                                     }
@@ -344,13 +349,13 @@ class MainActivity : ComponentActivity() {
                                     HorizontalDivider()
                                     Text("Appearance details", style = MaterialTheme.typography.titleMedium)
                                     Text("Opacity: $indicatorOpacity%", style = MaterialTheme.typography.bodyMedium)
-                                    Slider(value = indicatorOpacity.toFloat(), onValueChange = { indicatorOpacity = it.toInt().coerceIn(20, 100); prefs.edit().putInt("indicator_opacity", indicatorOpacity).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 20f..100f, steps = 39)
+                                    Slider(value = indicatorOpacity.toFloat(), onValueChange = { indicatorOpacity = it.toInt().coerceIn(20, 100); prefs.edit().putInt("indicator_opacity", indicatorOpacity).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 20f..100f, steps = 39)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Rounded ends", style = MaterialTheme.typography.titleMedium)
                                             Text("Use soft rounded edges on the progress line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                        Switch(checked = roundedCorners, onCheckedChange = { roundedCorners = it; prefs.edit().putBoolean("rounded_corners", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
+                                        Switch(checked = roundedCorners, onCheckedChange = { roundedCorners = it; prefs.edit().putBoolean("rounded_corners", it).apply(); if (overlayEnabled) refreshOverlay() })
                                     }
                                     HorizontalDivider()
                                     Text("Tracking", style = MaterialTheme.typography.titleMedium)
@@ -400,7 +405,7 @@ class MainActivity : ComponentActivity() {
                                             hideFullscreen = value
                                             prefs.edit().putBoolean("hide_fullscreen", value).apply()
                                             if (value) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                            if (overlayEnabled) refreshOverlay()
                                         })
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -411,10 +416,10 @@ class MainActivity : ComponentActivity() {
                                         Switch(checked = showOnLockScreen, onCheckedChange = { value ->
                                             showOnLockScreen = value
                                             prefs.edit().putBoolean("show_on_lock_screen", value).apply()
-                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                            if (overlayEnabled) refreshOverlay()
                                         })
                                     }
-                                    OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                    Button(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Open accessibility settings")
                                     }
                                 }
@@ -426,12 +431,12 @@ class MainActivity : ComponentActivity() {
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        OutlinedButton(onClick = {
+                                        Button(onClick = {
                                             knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
                                             ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
                                             appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap()
                                         }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Refresh list") }
-                                        OutlinedButton(onClick = {
+                                        Button(onClick = {
                                             ignoredPackages = emptySet()
                                             prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
                                         }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Track all") }

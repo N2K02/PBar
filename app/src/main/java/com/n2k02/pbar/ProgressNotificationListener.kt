@@ -16,6 +16,8 @@ class ProgressNotificationListener : NotificationListenerService() {
     private lateinit var mediaSessions: MediaSessionManager
     private val registeredControllers = mutableMapOf<MediaController, MediaController.Callback>()
     private val notificationControllers = mutableMapOf<String, MediaController>()
+    // The overlay lives here because Android binds and restarts this service itself.
+    private var overlayController: OverlayController? = null
     private val progressHandler = Handler(Looper.getMainLooper())
     private val timerHandler = Handler(Looper.getMainLooper())
     private var timerPackage = ""
@@ -51,7 +53,9 @@ class ProgressNotificationListener : NotificationListenerService() {
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("diagnostic_listener_connected", true)
             .putLong("diagnostic_listener_connected_at", System.currentTimeMillis()).apply()
-        mediaSessions = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
+        // Start the overlay first so it still works if media-session setup below fails.
+        overlayController = (overlayController ?: OverlayController(this)).also { it.start() }
+        mediaSessions =getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         runCatching {
             mediaSessions.addOnActiveSessionsChangedListener(sessionsChanged, ComponentName(this, ProgressNotificationListener::class.java))
             activeNotifications?.forEach(::consume)
@@ -190,7 +194,17 @@ class ProgressNotificationListener : NotificationListenerService() {
         }
     }
 
+    override fun onListenerDisconnected() {
+        overlayController?.stop()
+        getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("diagnostic_listener_connected", false).apply()
+        // Ask Android to reconnect so the overlay comes back without reopening PBar.
+        runCatching { NotificationListenerService.requestRebind(ComponentName(this, ProgressNotificationListener::class.java)) }
+        super.onListenerDisconnected()
+    }
+
     override fun onDestroy() {
+        overlayController?.stop()
+        overlayController = null
         registeredControllers.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
         registeredControllers.clear()
         progressHandler.removeCallbacks(progressTicker)
