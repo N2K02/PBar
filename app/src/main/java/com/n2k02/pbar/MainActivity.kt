@@ -212,7 +212,7 @@ class MainActivity : ComponentActivity() {
                                         Text(if (overlayReady) "Ready" else "Needed", style = MaterialTheme.typography.labelMedium)
                                     }
                                     if (!overlayReady) {
-                                        Button(onClick = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }, modifier = Modifier.fillMaxWidth()) {
+                                        Button(onClick = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                             Text("Grant overlay permission")
                                         }
                                     }
@@ -227,7 +227,7 @@ class MainActivity : ComponentActivity() {
                                         Text(if (listenerReady) "Ready" else "Needed", style = MaterialTheme.typography.labelMedium)
                                     }
                                     if (!listenerReady) {
-                                        OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                             Text("Grant notification access")
                                         }
                                     }
@@ -257,7 +257,7 @@ class MainActivity : ComponentActivity() {
                                     if (signalUpdated > 0L) {
                                         Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    OutlinedButton(onClick = { refreshSignalStatus() }, modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(onClick = { refreshSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Refresh status")
                                     }
                                 }
@@ -267,8 +267,8 @@ class MainActivity : ComponentActivity() {
                                     Text("Make it yours", style = MaterialTheme.typography.titleLarge)
                                     Text("Change bar position, orientation, thickness, colour, opacity, and corner style in Appearance. Choose which apps PBar watches in Apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(onClick = { tab = Tab.STYLE }) { Text("Appearance") }
-                                        OutlinedButton(onClick = { tab = Tab.APPS }) { Text("Choose apps") }
+                                        OutlinedButton(onClick = { tab = Tab.STYLE }, shapes = ButtonDefaults.shapes()) { Text("Appearance") }
+                                        OutlinedButton(onClick = { tab = Tab.APPS }, shapes = ButtonDefaults.shapes()) { Text("Choose apps") }
                                     }
                                 }
                             }
@@ -276,7 +276,7 @@ class MainActivity : ComponentActivity() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Quit PBar", style = MaterialTheme.typography.titleLarge)
                                     Text("Stops the floating progress bar and closes PBar. Open PBar again to resume automatic tracking.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    OutlinedButton(onClick = { quitPBar() }, modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(onClick = { quitPBar() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Quit PBar")
                                     }
                                 }
@@ -320,7 +320,7 @@ class MainActivity : ComponentActivity() {
                                             customColorMessage = "Saved"
                                             if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
                                         } else customColorMessage = "Enter a valid hex colour, such as #8B5CF6"
-                                    }, modifier = Modifier.fillMaxWidth()) { Text("Apply custom colour") }
+                                    }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Apply custom colour") }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
                                     val positionOptions = if (orientation == "vertical") {
                                         listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
@@ -407,7 +407,7 @@ class MainActivity : ComponentActivity() {
                                             if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
                                         })
                                     }
-                                    OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Open accessibility settings")
                                     }
                                 }
@@ -423,11 +423,11 @@ class MainActivity : ComponentActivity() {
                                             knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
                                             ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
                                             appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap()
-                                        }, modifier = Modifier.weight(1f)) { Text("Refresh list") }
+                                        }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Refresh list") }
                                         OutlinedButton(onClick = {
                                             ignoredPackages = emptySet()
                                             prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
-                                        }, modifier = Modifier.weight(1f)) { Text("Track all") }
+                                        }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Track all") }
                                     }
                                     if (knownPackages.isEmpty()) {
                                         Text("No source apps detected yet. Enable notification access, then play media or start a download and return here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -459,7 +459,7 @@ class MainActivity : ComponentActivity() {
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
-                                                        TextButton(onClick = { colorMenuExpanded = true }) { Text("Colour: $currentColorName") }
+                                                        TextButton(onClick = { colorMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text("Colour: $currentColorName") }
                                                         DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
                                                             appColorOptions.forEach { (optionName, hex) ->
                                                                 DropdownMenuItem(text = { Text(optionName) }, onClick = {
@@ -473,7 +473,7 @@ class MainActivity : ComponentActivity() {
                                                                 })
                                                             }
                                                         }
-                                                        TextButton(onClick = { advancedExpanded = !advancedExpanded }) { Text(if (advancedExpanded) "Less" else "Customize") }
+                                                        TextButton(onClick = { advancedExpanded = !advancedExpanded }, shapes = ButtonDefaults.shapes()) { Text(if (advancedExpanded) "Less" else "Customize") }
                                                     }
                                                     if (advancedExpanded) {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -495,11 +495,11 @@ class MainActivity : ComponentActivity() {
                                                                     prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
                                                                     sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
                                                                 }
-                                                            }) { Text("Apply") }
+                                                            }, shapes = ButtonDefaults.shapes()) { Text("Apply") }
                                                         }
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Style", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { styleMenuExpanded = true }) { Text(when (appStyle) { "line" -> "Line"; else -> "Default" }) }
+                                                            TextButton(onClick = { styleMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(when (appStyle) { "line" -> "Line"; else -> "Default" }) }
                                                             DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
                                                                 listOf("default" to "Default", "line" to "Line").forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
@@ -515,7 +515,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Orientation", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { orientationMenuExpanded = true }) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
+                                                            TextButton(onClick = { orientationMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
                                                             DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }) {
                                                                 listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
@@ -531,7 +531,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Position", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { positionMenuExpanded = true }) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
+                                                            TextButton(onClick = { positionMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
                                                             DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
                                                                 (if ((appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
                                                                     listOf("default" to "Default", "top" to "Top", "bottom" to "Bottom")
@@ -556,7 +556,7 @@ class MainActivity : ComponentActivity() {
                                                             prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
                                                             appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 36); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 0); appRingStroke = prefs.getInt("ring_stroke", 5)
                                                             sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
-                                                        }) { Text("Reset app style") }
+                                                        }, shapes = ButtonDefaults.shapes()) { Text("Reset app style") }
                                                     }
                                                 }
                                                 Switch(
@@ -622,7 +622,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth()
-                                    ) { Icon(Icons.Default.Download, null); Spacer(Modifier.width(8.dp)); Text(if (checking) "Checking…" else "Check for updates") }
+                                    , shapes = ButtonDefaults.shapes()) { Icon(Icons.Default.Download, null); Spacer(Modifier.width(8.dp)); Text(if (checking) "Checking…" else "Check for updates") }
                                     if (latestVersion != null && latestVersion != BuildConfig.VERSION_NAME) {
                                         Button(
                                             enabled = !downloading && apkUrl != null,
@@ -673,7 +673,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             },
                                             modifier = Modifier.fillMaxWidth()
-                                        ) { Text(if (downloading) "Downloading $downloadProgress%" else "Download version $latestVersion") }
+                                        , shapes = ButtonDefaults.shapes()) { Text(if (downloading) "Downloading $downloadProgress%" else "Download version $latestVersion") }
                                         if (downloading) {
                                             LinearProgressIndicator(progress = { downloadProgress / 100f }, modifier = Modifier.fillMaxWidth())
                                         }
@@ -690,10 +690,10 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 },
                                                 modifier = Modifier.fillMaxWidth()
-                                            ) { Text("Install update") }
+                                            , shapes = ButtonDefaults.shapes()) { Text("Install update") }
                                         }
                                     }
-                                    OutlinedButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl))) }, modifier = Modifier.fillMaxWidth()) { Text("View GitHub release") }
+                                    OutlinedButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl))) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("View GitHub release") }
                                 }
                             }
                         }

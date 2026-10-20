@@ -75,12 +75,13 @@ class ProgressNotificationListener : NotificationListenerService() {
         }
         controllers.forEach { rememberSourcePackage(it.packageName) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        // Only active playback should create a media progress overlay. A paused
+        // media session often remains registered for a long time after playback stops.
         val playingCandidates = controllers.filter { controller ->
             prefs.getBoolean("show_for_media", true) &&
                 !isIgnoredPackage(controller.packageName) && when (controller.playbackState?.state) {
                 PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
-                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING,
-                PlaybackState.STATE_PAUSED -> true
+                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
                 else -> false
             }
         }
@@ -123,12 +124,32 @@ class ProgressNotificationListener : NotificationListenerService() {
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             if (state?.state == PlaybackState.STATE_PLAYING) progressHandler.postDelayed(progressTicker, 500L)
         } else {
-            // If a media notification remains after its session stops reporting,
-            // retain the last position but freeze the animation rather than drifting.
-            prefs.edit().putBoolean("signal_playing", false).apply()
-            val notificationSignal = activeNotifications.orEmpty().any { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
-            if (!notificationSignal) {
-                prefs.edit().putBoolean("has_signal", false).putBoolean("signal_media", false).putBoolean("signal_timer", false).putBoolean("signal_download", false).putInt("signal_progress", 0).apply()
+            // A paused/finished media session must not keep the overlay visible.
+            // Preserve genuinely active timer/download progress notifications only.
+            val pausedMediaPackages = controllers.filter { controller ->
+                controller.playbackState?.state == PlaybackState.STATE_PAUSED ||
+                    controller.playbackState?.state == PlaybackState.STATE_STOPPED ||
+                    controller.playbackState?.state == PlaybackState.STATE_NONE
+            }.map { it.packageName }.toSet()
+            val remainingSignals = activeNotifications.orEmpty().filter { notification ->
+                !isIgnoredPackage(notification.packageName) &&
+                    notification.packageName !in pausedMediaPackages &&
+                    isIndicatorNotification(notification)
+            }
+            if (remainingSignals.isNotEmpty()) {
+                remainingSignals.forEach(::consume)
+            } else {
+                prefs.edit()
+                    .putBoolean("has_signal", false)
+                    .putBoolean("signal_media", false)
+                    .putBoolean("signal_playing", false)
+                    .putBoolean("signal_indeterminate", false)
+                    .putBoolean("signal_timer", false)
+                    .putBoolean("signal_download", false)
+                    .putInt("signal_progress", 0)
+                    .putLong("signal_duration", 0L)
+                    .putLong("signal_position", 0L)
+                    .apply()
                 sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             }
         }
