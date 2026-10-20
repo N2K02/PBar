@@ -184,7 +184,7 @@ class ProgressNotificationListener : NotificationListenerService() {
     private fun isGoogleTimerNotification(sbn: StatusBarNotification): Boolean {
         if (sbn.packageName != "com.google.android.deskclock") return false
         val key = sbn.notification.sortKey.orEmpty()
-        return key.contains("RUNNING") && (key.contains("⏳") || key.contains("Σ"))
+        return key.contains("RUNNING")
     }
 
     private fun parseGoogleTimerProgress(sbn: StatusBarNotification): Int? {
