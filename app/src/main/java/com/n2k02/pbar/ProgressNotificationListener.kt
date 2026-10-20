@@ -5,12 +5,23 @@ import android.content.ComponentName
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 class ProgressNotificationListener : NotificationListenerService() {
     private lateinit var mediaSessions: MediaSessionManager
     private val registeredControllers = mutableMapOf<MediaController, MediaController.Callback>()
+    private val progressHandler = Handler(Looper.getMainLooper())
+    private val progressTicker = object : Runnable {
+        override fun run() {
+            if (!::mediaSessions.isInitialized) return
+            val controllers = runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList())
+            refreshMediaSessions(controllers)
+        }
+    }
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         refreshMediaSessions(controllers.orEmpty())
     }
@@ -50,14 +61,22 @@ class ProgressNotificationListener : NotificationListenerService() {
                 else -> false
             }
         }
+        progressHandler.removeCallbacks(progressTicker)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (playing != null) {
             val metadata = playing.metadata
+            val state = playing.playbackState
+            val duration = metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+            val position = state?.position ?: 0L
+            val estimatedPosition = if (state?.state == PlaybackState.STATE_PLAYING && state.lastPositionUpdateTime > 0L) position + ((SystemClock.elapsedRealtime() - state.lastPositionUpdateTime) * state.playbackSpeed).toLong() else position
+            val percent = if (duration > 0L) ((estimatedPosition.coerceIn(0L, duration) * 100L) / duration).toInt() else 0
             prefs.edit()
                 .putBoolean("has_signal", true)
                 .putBoolean("signal_media", true)
-                .putBoolean("signal_indeterminate", true)
-                .putInt("signal_progress", 0)
+                .putBoolean("signal_indeterminate", duration <= 0L)
+                .putInt("signal_progress", percent)
+                .putLong("signal_duration", duration)
+                .putLong("signal_position", estimatedPosition.coerceAtLeast(0L))
                 .putInt("signal_color", 0)
                 .putString("signal_package", playing.packageName)
                 .putString("signal_title", metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE) ?: playing.packageName)
@@ -65,6 +84,7 @@ class ProgressNotificationListener : NotificationListenerService() {
                 .putLong("signal_updated", System.currentTimeMillis())
                 .apply()
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+            if (state?.state == PlaybackState.STATE_PLAYING) progressHandler.postDelayed(progressTicker, 500L)
         } else {
             val notificationSignal = activeNotifications.orEmpty().any(::isIndicatorNotification)
             if (!notificationSignal) {
@@ -77,6 +97,7 @@ class ProgressNotificationListener : NotificationListenerService() {
     override fun onDestroy() {
         registeredControllers.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
         registeredControllers.clear()
+        progressHandler.removeCallbacks(progressTicker)
         if (::mediaSessions.isInitialized) runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
         super.onDestroy()
     }
