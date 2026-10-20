@@ -54,8 +54,9 @@ class ProgressNotificationListener : NotificationListenerService() {
                 runCatching { controller.registerCallback(callback) }
             }
         }
+        controllers.forEach { rememberSourcePackage(it.packageName) }
         val playing = controllers.firstOrNull { controller ->
-            when (controller.playbackState?.state) {
+            !isIgnoredPackage(controller.packageName) && when (controller.playbackState?.state) {
                 PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
                 PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
                 else -> false
@@ -86,7 +87,7 @@ class ProgressNotificationListener : NotificationListenerService() {
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             if (state?.state == PlaybackState.STATE_PLAYING) progressHandler.postDelayed(progressTicker, 500L)
         } else {
-            val notificationSignal = activeNotifications.orEmpty().any(::isIndicatorNotification)
+            val notificationSignal = activeNotifications.orEmpty().any { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
             if (!notificationSignal) {
                 prefs.edit().putBoolean("has_signal", false).putBoolean("signal_media", false).putInt("signal_progress", 0).apply()
                 sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
@@ -108,6 +109,15 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     private fun consume(sbn: StatusBarNotification) {
+        rememberSourcePackage(sbn.packageName)
+        if (isIgnoredPackage(sbn.packageName)) {
+            val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+            if (prefs.getString("signal_package", null) == sbn.packageName) {
+                prefs.edit().putBoolean("has_signal", false).apply()
+                sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+            }
+            return
+        }
         val n = sbn.notification ?: return
         val extras = n.extras ?: return
         val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
@@ -140,7 +150,7 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        val remaining = activeNotifications.orEmpty().filter(::isIndicatorNotification)
+        val remaining = activeNotifications.orEmpty().filter { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (remaining.isEmpty()) {
             prefs.edit().putBoolean("has_signal", false).putInt("signal_progress", 0).putBoolean("signal_media", false).apply()
@@ -148,6 +158,19 @@ class ProgressNotificationListener : NotificationListenerService() {
         } else {
             remaining.forEach(::consume)
         }
+    }
+
+    private fun rememberSourcePackage(sourcePackage: String) {
+        if (sourcePackage.isBlank() || sourcePackage == packageName) return
+        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        val known = prefs.getStringSet("known_packages", emptySet())?.toMutableSet() ?: mutableSetOf()
+        if (known.add(sourcePackage)) prefs.edit().putStringSet("known_packages", known).apply()
+    }
+
+    private fun isIgnoredPackage(sourcePackage: String): Boolean {
+        return getSharedPreferences("pbar", MODE_PRIVATE)
+            .getStringSet("ignored_packages", emptySet())
+            ?.contains(sourcePackage) == true
     }
 
     private fun isIndicatorNotification(sbn: StatusBarNotification): Boolean {
