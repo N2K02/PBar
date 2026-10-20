@@ -350,6 +350,7 @@ class MainActivity : ComponentActivity() {
                                                     var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
                                                     var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
                                                     var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
+                                                    var appCustomHex by remember(packageName) { mutableStateOf(appColorOverrides[packageName] ?: "") }
                                                     var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)) }
                                                     var appRingSize by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_size", prefs.getInt("ring_size", 68)).coerceIn(40, 120)) }
                                                     var appRingOffsetX by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)) }
@@ -365,6 +366,7 @@ class MainActivity : ComponentActivity() {
                                                                 DropdownMenuItem(text = { Text(optionName) }, onClick = {
                                                                     val updated = appColorOverrides.toMutableMap()
                                                                     if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
+                                                                    appCustomHex = hex
                                                                     appColorOverrides = updated
                                                                     prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
                                                                     colorMenuExpanded = false
@@ -375,6 +377,27 @@ class MainActivity : ComponentActivity() {
                                                         TextButton(onClick = { advancedExpanded = !advancedExpanded }) { Text(if (advancedExpanded) "Less" else "Customize") }
                                                     }
                                                     if (advancedExpanded) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            OutlinedTextField(
+                                                                value = appCustomHex,
+                                                                onValueChange = { appCustomHex = it },
+                                                                label = { Text("Custom hex") },
+                                                                placeholder = { Text("#8B5CF6") },
+                                                                singleLine = true,
+                                                                modifier = Modifier.weight(1f)
+                                                            )
+                                                            TextButton(onClick = {
+                                                                val normalized = if (appCustomHex.startsWith("#")) appCustomHex else "#$appCustomHex"
+                                                                if (runCatching { android.graphics.Color.parseColor(normalized) }.isSuccess) {
+                                                                    val updated = appColorOverrides.toMutableMap()
+                                                                    updated[packageName] = normalized
+                                                                    appColorOverrides = updated
+                                                                    appCustomHex = normalized
+                                                                    prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
+                                                                    sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                }
+                                                            }) { Text("Apply") }
+                                                        }
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Style", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { styleMenuExpanded = true }) { Text(when (appStyle) { "line" -> "Line"; "ring" -> "Ring"; else -> "Default" }) }
