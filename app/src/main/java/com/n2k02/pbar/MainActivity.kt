@@ -68,6 +68,17 @@ class MainActivity : ComponentActivity() {
         var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
+        var hideFullscreen by remember { mutableStateOf(prefs.getBoolean("hide_fullscreen", false)) }
+        var showOnLockScreen by remember { mutableStateOf(prefs.getBoolean("show_on_lock_screen", false)) }
+        var showForDownloads by remember { mutableStateOf(prefs.getBoolean("show_for_downloads", true)) }
+        var showForMedia by remember { mutableStateOf(prefs.getBoolean("show_for_media", true)) }
+        var showForTimers by remember { mutableStateOf(prefs.getBoolean("show_for_timers", true)) }
+        var ringSize by remember { mutableIntStateOf(prefs.getInt("ring_size", 68).coerceIn(40, 120)) }
+        var ringOffsetX by remember { mutableIntStateOf(prefs.getInt("ring_offset_x", 0).coerceIn(-150, 150)) }
+        var ringOffsetY by remember { mutableIntStateOf(prefs.getInt("ring_offset_y", 28).coerceIn(0, 160)) }
+        var ringStroke by remember { mutableIntStateOf(prefs.getInt("ring_stroke", 5).coerceIn(2, 10)) }
+        var indicatorOpacity by remember { mutableIntStateOf(prefs.getInt("indicator_opacity", 100).coerceIn(20, 100)) }
+        var roundedCorners by remember { mutableStateOf(prefs.getBoolean("rounded_corners", true)) }
         var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
         var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
         var appColorOverrides by remember {
@@ -205,6 +216,83 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     Text("“Near camera” is an approximate top-center position; exact placement depends on the device's cutout.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (style == "ring") {
+                                        HorizontalDivider()
+                                        Text("Camera-hole calibration", style = MaterialTheme.typography.titleMedium)
+                                        Text("Ring size: $ringSize dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringSize.toFloat(), onValueChange = { ringSize = it.toInt().coerceIn(40, 120); prefs.edit().putInt("ring_size", ringSize).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 40f..120f, steps = 39)
+                                        Text("Horizontal offset: $ringOffsetX dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringOffsetX.toFloat(), onValueChange = { ringOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("ring_offset_x", ringOffsetX).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = -150f..150f, steps = 59)
+                                        Text("Vertical offset: $ringOffsetY dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringOffsetY.toFloat(), onValueChange = { ringOffsetY = it.toInt().coerceIn(0, 160); prefs.edit().putInt("ring_offset_y", ringOffsetY).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 0f..160f, steps = 39)
+                                        Text("Ring stroke: $ringStroke dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringStroke.toFloat(), onValueChange = { ringStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("ring_stroke", ringStroke).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 2f..10f, steps = 7)
+                                    }
+                                    HorizontalDivider()
+                                    Text("Appearance details", style = MaterialTheme.typography.titleMedium)
+                                    Text("Opacity: $indicatorOpacity%", style = MaterialTheme.typography.bodyMedium)
+                                    Slider(value = indicatorOpacity.toFloat(), onValueChange = { indicatorOpacity = it.toInt().coerceIn(20, 100); prefs.edit().putInt("indicator_opacity", indicatorOpacity).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 20f..100f, steps = 39)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Rounded ends", style = MaterialTheme.typography.titleMedium)
+                                            Text("Use soft rounded edges on the progress line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = roundedCorners, onCheckedChange = { roundedCorners = it; prefs.edit().putBoolean("rounded_corners", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
+                                    }
+                                    HorizontalDivider()
+                                    Text("Tracking", style = MaterialTheme.typography.titleMedium)
+                                    listOf(
+                                        Triple("Downloads and transfers", "Read notification progress when apps expose it.", showForDownloads),
+                                        Triple("Music and media", "Track supported playback sessions.", showForMedia),
+                                        Triple("Google Clock timers", "Track timer progress when Clock exposes it.", showForTimers)
+                                    ).forEach { (label, summary, enabled) ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(label, style = MaterialTheme.typography.titleSmall)
+                                                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            Switch(
+                                                checked = enabled,
+                                                onCheckedChange = { value ->
+                                                    when (label) {
+                                                        "Downloads and transfers" -> { showForDownloads = value; prefs.edit().putBoolean("show_for_downloads", value).apply() }
+                                                        "Music and media" -> { showForMedia = value; prefs.edit().putBoolean("show_for_media", value).apply() }
+                                                        else -> { showForTimers = value; prefs.edit().putBoolean("show_for_timers", value).apply() }
+                                                    }
+                                                    sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                }
+                                            )
+                                        }
+                                    }
+                                    HorizontalDivider()
+                                    Text("Screen behaviour", style = MaterialTheme.typography.titleMedium)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Hide in fullscreen", style = MaterialTheme.typography.titleSmall)
+                                            Text("Hide the indicator in immersive apps and fullscreen video. Requires the optional PBar accessibility helper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = hideFullscreen, onCheckedChange = { value ->
+                                            hideFullscreen = value
+                                            prefs.edit().putBoolean("hide_fullscreen", value).apply()
+                                            if (value) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                        })
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Show on lock screen", style = MaterialTheme.typography.titleSmall)
+                                            Text("Allow the indicator on the lock screen. Requires the optional PBar accessibility helper to be enabled.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = showOnLockScreen, onCheckedChange = { value ->
+                                            showOnLockScreen = value
+                                            prefs.edit().putBoolean("show_on_lock_screen", value).apply()
+                                            if (value) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                        })
+                                    }
+                                    OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Open accessibility settings")
+                                    }
                                 }
                             }
                         }
