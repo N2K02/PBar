@@ -41,9 +41,6 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/pbar_accessibility_service" />
         </service>
-        <service
-            android:name=".FloatingIndicatorService"
-            android:exported="false" />
         <provider
             android:name=".UpdateFileProvider"
             android:authorities="${applicationId}.updates"
