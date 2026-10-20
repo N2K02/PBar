@@ -83,6 +83,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun quitPBar() {
+        getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("overlay_enabled", false).apply()
+        stopService(Intent(this, FloatingIndicatorService::class.java))
+        finishAndRemoveTask()
+    }
+
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     private fun PBarApp() {
@@ -214,6 +220,15 @@ class MainActivity : ComponentActivity() {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(onClick = { tab = Tab.STYLE }) { Text("Appearance") }
                                         OutlinedButton(onClick = { tab = Tab.APPS }) { Text("Choose apps") }
+                                    }
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Quit PBar", style = MaterialTheme.typography.titleLarge)
+                                    Text("Stops the floating progress bar and closes PBar. Open PBar again to resume automatic tracking.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    OutlinedButton(onClick = { quitPBar() }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Quit PBar")
                                     }
                                 }
                             }
