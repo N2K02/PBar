@@ -20,7 +20,6 @@ class ProgressNotificationListener : NotificationListenerService() {
             if (!::mediaSessions.isInitialized) return
             val controllers = runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList())
             refreshMediaSessions(controllers)
-            if (controllers.any { it.playbackState?.state == PlaybackState.STATE_PLAYING }) progressHandler.postDelayed(this, 500L)
         }
     }
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
