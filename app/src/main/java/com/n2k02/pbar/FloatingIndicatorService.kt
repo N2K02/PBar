@@ -175,7 +175,6 @@ class FloatingIndicatorService : Service() {
             val primary = appOverride
                 ?: if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor
                 else customColor ?: fallbackColor
-            val tertiary = Color.rgb(0, 150, 136)
             val opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
             val rounded = prefs.getBoolean("rounded_corners", true)
             if (ring) {
@@ -188,7 +187,7 @@ class FloatingIndicatorService : Service() {
                 paint.color = Color.argb(opacity * 225 / 255, 240, 238, 246)
                 canvas.drawArc(bounds, 0f, 360f, false, paint)
                 if (signal) {
-                    val activeColor = appOverride ?: if (media) tertiary else primary
+                    val activeColor = appOverride ?: primary
                     paint.color = Color.argb(opacity, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
                     val sweep = if (indeterminate) 115f else displayProgress * 3.6f
                     val startAngle = if (indeterminate) -90f + (SystemClock.uptimeMillis() % 1400L) / 1400f * 360f else -90f
@@ -209,7 +208,7 @@ class FloatingIndicatorService : Service() {
                 if (rounded) canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), height / 2f, height / 2f, paint)
                 else canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
                 if (signal) {
-                    val activeColor = if (media) tertiary else primary
+                    val activeColor = appOverride ?: primary
                     paint.color = Color.argb(opacity, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
                     if (width < height) {
                         val segment = if (indeterminate) height * 0.35f else height * displayProgress / 100f
