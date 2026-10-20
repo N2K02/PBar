@@ -87,9 +87,14 @@ class ProgressNotificationListener : NotificationListenerService() {
         // Prefer a session that exposes usable timing data; stale browser/system
         // sessions can otherwise win and leave the indicator apparently stuck.
         val playing = playingCandidates.firstOrNull { controller ->
-            (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
+            controller.playbackState?.state != PlaybackState.STATE_PAUSED &&
+                (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
                 (controller.playbackState?.position ?: -1L) >= 0L
-        } ?: playingCandidates.firstOrNull()
+        } ?: playingCandidates.firstOrNull { it.playbackState?.state != PlaybackState.STATE_PAUSED }
+            ?: playingCandidates.firstOrNull { controller ->
+                (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
+                    (controller.playbackState?.position ?: -1L) >= 0L
+            } ?: playingCandidates.firstOrNull()
         progressHandler.removeCallbacks(progressTicker)
         if (playing != null) {
             val metadata = playing.metadata
