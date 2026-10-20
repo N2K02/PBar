@@ -25,7 +25,15 @@ class FloatingIndicatorService : Service() {
     private var overlay: View? = null
     private lateinit var wm: WindowManager
     private val refreshReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) { render() }
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+            if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false)) {
+                removeOverlay()
+            } else {
+                val current = overlay
+                if (current is IndicatorView) current.updateFrom(prefs) else render()
+            }
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -154,7 +162,7 @@ class FloatingIndicatorService : Service() {
                 if (signal) {
                     paint.color = if (media) tertiary else primary
                     val sweep = when {
-                        media || indeterminate -> 115f
+                        indeterminate -> 115f
                         else -> progress * 3.6f
                     }
                     canvas.drawArc(bounds, -90f, sweep, false, paint)
@@ -173,10 +181,10 @@ class FloatingIndicatorService : Service() {
                 if (signal) {
                     paint.color = if (media) tertiary else primary
                     if (width < height) {
-                        val segment = if (media || indeterminate) height * 0.35f else height * progress / 100f
+                        val segment = if (indeterminate) height * 0.35f else height * progress / 100f
                         canvas.drawRect(0f, height - segment, width.toFloat(), height.toFloat(), paint)
                     } else {
-                        val segment = if (media || indeterminate) width * 0.35f else width * progress / 100f
+                        val segment = if (indeterminate) width * 0.12f else width * progress / 100f
                         canvas.drawRect(0f, 0f, segment, height.toFloat(), paint)
                     }
                 }
