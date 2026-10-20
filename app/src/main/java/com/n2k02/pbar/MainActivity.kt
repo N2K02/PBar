@@ -4,9 +4,11 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,7 +20,11 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +48,7 @@ class MainActivity : ComponentActivity() {
         setContent { PBarApp() }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     private fun PBarApp() {
         val context = LocalContext.current
@@ -58,7 +64,14 @@ class MainActivity : ComponentActivity() {
         var updateMessage by remember { mutableStateOf("Check GitHub for the latest PBar release.") }
         var checking by remember { mutableStateOf(false) }
 
-        MaterialExpressiveTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+        val dark = isSystemInDarkTheme()
+        val scheme = when {
+            Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(context)
+            Build.VERSION.SDK_INT >= 31 -> dynamicLightColorScheme(context)
+            dark -> darkColorScheme()
+            else -> lightColorScheme()
+        }
+        MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.expressive()) {
             Scaffold(
                 contentWindowInsets = WindowInsets.safeDrawing,
                 topBar = {
