@@ -70,6 +70,22 @@ class MainActivity : ComponentActivity() {
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
         var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
         var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
+        var appColorOverrides by remember {
+            mutableStateOf(
+                prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry ->
+                    val split = entry.split("=", limit = 2)
+                    if (split.size == 2) split[0] to split[1] else null
+                }.toMap()
+            )
+        }
+        val appColorOptions = listOf(
+            "Automatic" to "",
+            "Mint" to "#55D6BE",
+            "Blue" to "#60A5FA",
+            "Purple" to "#B39DDB",
+            "Green" to "#A6E3A1",
+            "Orange" to "#FFB86C"
+        )
         var latestVersion by remember { mutableStateOf<String?>(null) }
         var apkUrl by remember { mutableStateOf<String?>(null) }
         var releaseUrl by remember { mutableStateOf("https://github.com/N2K02/PBar/releases/latest") }
@@ -98,7 +114,7 @@ class MainActivity : ComponentActivity() {
                     NavigationBar {
                         NavigationBarItem(selected = tab == Tab.HOME, onClick = { tab = Tab.HOME }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
                         NavigationBarItem(selected = tab == Tab.STYLE, onClick = { tab = Tab.STYLE }, icon = { Icon(Icons.Default.Palette, null) }, label = { Text("Appearance") })
-                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet() }, icon = { Icon(Icons.Default.Tune, null) }, label = { Text("Apps") })
+                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Default.Tune, null) }, label = { Text("Apps") })
                         NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { tab = Tab.UPDATES }, icon = { Icon(Icons.Default.SystemUpdate, null) }, label = { Text("Updates") })
                     }
                 }
@@ -194,13 +210,14 @@ class MainActivity : ComponentActivity() {
                         }
                         Tab.APPS -> {
                             Text("Choose which apps PBar tracks", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("PBar remembers apps that have published a progress or media notification. Turn tracking off for apps you do not want shown. This filter is stored on your device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("PBar remembers apps that have published a progress or media notification. Turn tracking off for unwanted sources, or choose a colour for each app. Settings stay on your device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         OutlinedButton(onClick = {
                                             knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
                                             ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
+                                            appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap()
                                         }, modifier = Modifier.weight(1f)) { Text("Refresh list") }
                                         OutlinedButton(onClick = {
                                             ignoredPackages = emptySet()
@@ -221,6 +238,26 @@ class MainActivity : ComponentActivity() {
                                                 Column(Modifier.weight(1f)) {
                                                     Text(label, style = MaterialTheme.typography.titleMedium)
                                                     Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                        val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: "Automatic"
+                                                        TextButton(onClick = { colorMenuExpanded = true }) { Text(currentColorName) }
+                                                        DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
+                                                            appColorOptions.forEach { (optionName, hex) ->
+                                                                DropdownMenuItem(
+                                                                    text = { Text(optionName) },
+                                                                    onClick = {
+                                                                        val updated = appColorOverrides.toMutableMap()
+                                                                        if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
+                                                                        appColorOverrides = updated
+                                                                        prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
+                                                                        colorMenuExpanded = false
+                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                    }
+                                                                )
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                                 Switch(
                                                     checked = packageName !in ignoredPackages,
