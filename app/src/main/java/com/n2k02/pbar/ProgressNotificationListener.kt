@@ -3,6 +3,7 @@ package com.n2k02.pbar
 import android.app.Notification
 import android.content.ComponentName
 import android.media.session.MediaController
+import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
@@ -14,6 +15,7 @@ import android.service.notification.StatusBarNotification
 class ProgressNotificationListener : NotificationListenerService() {
     private lateinit var mediaSessions: MediaSessionManager
     private val registeredControllers = mutableMapOf<MediaController, MediaController.Callback>()
+    private val notificationControllers = mutableMapOf<String, MediaController>()
     private val progressHandler = Handler(Looper.getMainLooper())
     private val timerHandler = Handler(Looper.getMainLooper())
     private var timerPackage = ""
@@ -42,20 +44,36 @@ class ProgressNotificationListener : NotificationListenerService() {
         }
     }
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
-        refreshMediaSessions(controllers.orEmpty())
+        refreshMediaSessions((controllers.orEmpty() + notificationControllers.values).distinctBy { it.sessionToken })
     }
 
     override fun onListenerConnected() {
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("diagnostic_listener_connected", true)
             .putLong("diagnostic_listener_connected_at", System.currentTimeMillis()).apply()
-        activeNotifications?.forEach(::consume)
         mediaSessions = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         runCatching {
             mediaSessions.addOnActiveSessionsChangedListener(sessionsChanged, ComponentName(this, ProgressNotificationListener::class.java))
-            refreshMediaSessions(mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java)))
+            activeNotifications?.forEach(::consume)
+            refreshMediaSessions(currentMediaControllers())
         }.onFailure { error ->
             prefs.edit().putString("diagnostic_session_error", error.javaClass.simpleName + ": " + (error.message ?: "no details")).apply()
+        }
+    }
+
+    private fun currentMediaControllers(): List<MediaController> {
+        val active = if (::mediaSessions.isInitialized) runCatching {
+            mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
+        }.getOrDefault(emptyList()) else emptyList()
+        return (active + notificationControllers.values).distinctBy { it.sessionToken }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun rememberNotificationSession(sbn: StatusBarNotification) {
+        val extras = sbn.notification.extras ?: return
+        val token = extras.getParcelable<MediaSession.Token>(Notification.EXTRA_MEDIA_SESSION) ?: return
+        runCatching { MediaController(this, token) }.getOrNull()?.let { controller ->
+            notificationControllers[sbn.key] = controller
         }
     }
 
@@ -68,7 +86,7 @@ class ProgressNotificationListener : NotificationListenerService() {
             if (!registeredControllers.containsKey(controller)) {
                 val callback = object : MediaController.Callback() {
                     override fun onPlaybackStateChanged(state: PlaybackState?) {
-                        refreshMediaSessions(runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList()))
+                        refreshMediaSessions(currentMediaControllers())
                     }
                     override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {
                         refreshMediaSessions(runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList()))
@@ -178,6 +196,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         progressHandler.removeCallbacks(progressTicker)
         stopTimerTicker()
         if (::mediaSessions.isInitialized) runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
+        notificationControllers.clear()
         getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("diagnostic_listener_connected", false).apply()
         super.onDestroy()
     }
@@ -189,6 +208,10 @@ class ProgressNotificationListener : NotificationListenerService() {
 
     private fun consume(sbn: StatusBarNotification) {
         rememberSourcePackage(sbn.packageName)
+        if (isMediaNotification(sbn)) {
+            rememberNotificationSession(sbn)
+            if (::mediaSessions.isInitialized) refreshMediaSessions(currentMediaControllers())
+        }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (isIgnoredPackage(sbn.packageName)) {
             if (prefs.getString("signal_package", null) == sbn.packageName) {
@@ -349,16 +372,14 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        notificationControllers.remove(sbn.key)
         if (isGoogleTimerNotification(sbn)) stopTimerTicker()
 
         // Notification lifetimes and MediaSession lifetimes are not identical. Some
         // players replace/remove their media notification while playback continues.
         // Re-query sessions before clearing the overlay signal so a live session wins.
         if (::mediaSessions.isInitialized) {
-            val controllers = runCatching {
-                mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
-            }.getOrDefault(emptyList())
-            refreshMediaSessions(controllers)
+            refreshMediaSessions(currentMediaControllers())
         }
 
         // Media notifications are handled exclusively through MediaSession state.
