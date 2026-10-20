@@ -23,9 +23,12 @@ PBar is an Android progress overlay inspired by the idea of a quick-glance statu
 - Android 8.0 (API 26) or newer.
 - Notification access to read progress/media/timer notifications.
 - Display-over-other-apps permission to show the indicator.
+- No persistent PBar foreground-service notification; the overlay uses a regular started service, like NetSpeed.
 - Accessibility permission is optional and used for fullscreen window-boundary detection. PBar does not read or store on-screen text.
 
 PBar can only show exact progress when Android or the source app exposes suitable progress, timer, or media-session metadata. If a source exposes no usable duration/position, PBar uses an animated indeterminate indicator instead.
+
+The floating overlay runs without a persistent foreground-service notification to keep the notification drawer clear. Android may stop regular background services under memory or battery pressure; if the overlay stops, reopen PBar or exempt it from battery optimisation in system settings. This is a deliberate trade-off compared with a foreground service.
 
 ## Build
 
