@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.KeyguardManager
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -24,15 +25,13 @@ import android.view.WindowManager
 class FloatingIndicatorService : Service() {
     private var overlay: View? = null
     private lateinit var wm: WindowManager
+    private var fullscreen = false
     private val refreshReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-            if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false)) {
-                removeOverlay()
-            } else {
-                val current = overlay
-                if (current is IndicatorView) current.updateFrom(prefs) else render()
+            if (intent?.action == PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED) {
+                fullscreen = intent.getBooleanExtra(PBarAccessibilityService.EXTRA_FULLSCREEN, false)
             }
+            render()
         }
     }
 
@@ -40,8 +39,15 @@ class FloatingIndicatorService : Service() {
     override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL), RECEIVER_NOT_EXPORTED)
-        else registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL))
+        val filter = IntentFilter().apply {
+            addAction(ProgressNotificationListener.ACTION_SIGNAL)
+            addAction(PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, filter, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(refreshReceiver, filter)
         if (Settings.canDrawOverlays(this)) render()
     }
 
@@ -78,20 +84,28 @@ class FloatingIndicatorService : Service() {
     private fun render() {
         if (!Settings.canDrawOverlays(this)) return
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false)) {
+        val keyguard = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+        val locked = keyguard.isKeyguardLocked
+        if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false) ||
+            (prefs.getBoolean("hide_fullscreen", false) && fullscreen) ||
+            (locked && !prefs.getBoolean("show_on_lock_screen", false))) {
             removeOverlay()
             return
         }
         val isRing = prefs.getString("style", "line") == "ring"
         val vertical = !isRing && prefs.getString("orientation", "horizontal") == "vertical"
         val thickness = prefs.getInt("thickness", 4).coerceIn(2, 12)
+        val ringSize = prefs.getInt("ring_size", 68).coerceIn(40, 120)
+        val ringOffsetX = prefs.getInt("ring_offset_x", 0).coerceIn(-150, 150)
+        val ringOffsetY = prefs.getInt("ring_offset_y", 28).coerceIn(0, 160)
         val params = WindowManager.LayoutParams(
-            when { isRing -> dp(68); vertical -> dp(thickness); else -> WindowManager.LayoutParams.MATCH_PARENT },
-            when { isRing -> dp(68); vertical -> WindowManager.LayoutParams.MATCH_PARENT; else -> dp(thickness) },
+            when { isRing -> dp(ringSize); vertical -> dp(thickness); else -> WindowManager.LayoutParams.MATCH_PARENT },
+            when { isRing -> dp(ringSize); vertical -> WindowManager.LayoutParams.MATCH_PARENT; else -> dp(thickness) },
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                (if (prefs.getBoolean("show_on_lock_screen", false)) WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED else 0),
             android.graphics.PixelFormat.TRANSLUCENT
         ).apply {
             gravity = if (vertical) {
@@ -107,9 +121,9 @@ class FloatingIndicatorService : Service() {
                     else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 }
             }
-            x = dp(2)
+            x = if (isRing) dp(ringOffsetX) else dp(2)
             y = when (prefs.getString("position", "top")) {
-                "camera" -> dp(28)
+                "camera" -> dp(ringOffsetY)
                 "bottom" -> dp(12)
                 else -> dp(2)
             }
