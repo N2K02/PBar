@@ -31,6 +31,9 @@
         </service>
         <service
             android:name=".FloatingIndicatorService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled floating progress indicator over other apps" />
+        </service>
     </application>
 </manifest>
