@@ -187,7 +187,7 @@ class FloatingIndicatorService : Service() {
             val opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
             val rounded = prefs.getBoolean("rounded_corners", true)
             if (ring) {
-                val stroke = prefs.getInt("ring_stroke", 5).coerceIn(2, 10) * density
+                val stroke = prefs.getInt("app_${sourcePackage}_ring_stroke", prefs.getInt("ring_stroke", 5)).coerceIn(2, 10) * density
                 val inset = stroke
                 bounds.set(inset, inset, width - inset, height - inset)
                 paint.style = Paint.Style.STROKE
@@ -196,7 +196,7 @@ class FloatingIndicatorService : Service() {
                 paint.color = Color.argb(opacity * 225 / 255, 240, 238, 246)
                 canvas.drawArc(bounds, 0f, 360f, false, paint)
                 if (signal) {
-                    val activeColor = if (media) tertiary else primary
+                    val activeColor = appOverride ?: if (media) tertiary else primary
                     paint.color = Color.argb(opacity, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
                     val sweep = if (indeterminate) 115f else progress * 3.6f
                     val startAngle = if (indeterminate) -90f + (SystemClock.uptimeMillis() % 1400L) / 1400f * 360f else -90f
