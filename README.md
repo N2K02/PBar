@@ -7,7 +7,7 @@ PBar is an Android progress overlay inspired by the idea of a quick-glance statu
 - Progress line or circular ring overlay.
 - Horizontal or vertical line placement, edge positioning, adjustable thickness, rounded ends, and opacity.
 - Adjustable ring size, stroke, and camera-hole X/Y calibration.
-- Automatic source notification colour, plus per-app colour presets.
+- Automatic source notification colour, a custom global hex colour, and preset or custom hex colours per app.
 - Per-app customisation for indicator shape, orientation, position, thickness, and ring calibration.
 - Per-app allow/ignore controls.
 - Download/transfer, media, and Google Clock timer tracking switches.
