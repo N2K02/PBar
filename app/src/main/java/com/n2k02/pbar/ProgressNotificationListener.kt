@@ -114,7 +114,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (isIgnoredPackage(sbn.packageName)) {
             if (prefs.getString("signal_package", null) == sbn.packageName) {
-                prefs.edit().putBoolean("has_signal", false).apply()
+                prefs.edit().putBoolean("has_signal", false).putBoolean("signal_timer", false).apply()
                 sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             }
             return
@@ -158,6 +158,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         prefs.edit()
             .putBoolean("has_signal", true)
             .putBoolean("signal_media", media && !hasProgress && !timer)
+            .putBoolean("signal_timer", timer)
             .putBoolean("signal_indeterminate", indeterminate)
             .putInt("signal_progress", percent)
             .putInt("signal_color", n.color)
@@ -211,7 +212,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         val remaining = activeNotifications.orEmpty().filter { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (remaining.isEmpty()) {
-            prefs.edit().putBoolean("has_signal", false).putInt("signal_progress", 0).putBoolean("signal_media", false).apply()
+            prefs.edit().putBoolean("has_signal", false).putInt("signal_progress", 0).putBoolean("signal_media", false).putBoolean("signal_timer", false).apply()
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
         } else {
             remaining.forEach(::consume)
