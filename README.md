@@ -1,34 +1,39 @@
 # PBar
 
-PBar is an Android app for showing lightweight floating progress indicators over other apps. It is designed to surface progress from ongoing download notifications and provide a compact visual indicator for media playback notifications.
+PBar is an Android progress overlay inspired by the idea of a quick-glance status-bar indicator. It uses PBar's own implementation and UI to track supported downloads, media playback, and Google Clock timers.
 
 ## Features
 
-- Floating progress line or ring overlay.
-- Reads progress exposed by ongoing notifications from other apps.
-- Detects media notifications and shows a playback indicator when the source exposes that state.
-- Manual horizontal or vertical line orientation, edge/centre placement, adjustable 2–12 dp thickness, and source-notification colour when available.
-- Material 3 Expressive interface with Home, Appearance, and Updates sections.
-- In-app update page to check GitHub Releases, download an APK with progress, and open Android's installer.
-- Layout adapts to portrait and landscape.
-- Respects Android navigation-bar and display cutout insets.
+- Progress line or circular ring overlay.
+- Horizontal or vertical line placement, edge positioning, adjustable thickness, rounded ends, and opacity.
+- Adjustable ring size, stroke, and camera-hole X/Y calibration.
+- Automatic source notification colour, plus per-app colour presets.
+- Per-app customisation for indicator shape, orientation, position, thickness, and ring calibration.
+- Per-app allow/ignore controls.
+- Download/transfer, media, and Google Clock timer tracking switches.
+- Media-session playback position estimation where Android exposes duration and position.
+- Fullscreen auto-hide using an optional accessibility helper.
+- Optional lock-screen display, subject to Android/device restrictions.
+- Material 3 Expressive interface with Home, Appearance, Apps, and Updates sections.
+- In-app GitHub Releases updater.
+- Portrait and landscape layouts; respects display cutouts and navigation insets.
 
 ## Requirements
 
 - Android 8.0 (API 26) or newer.
-- Notification access to read progress/media notifications.
-- Display-over-other-apps permission to show the floating indicator.
+- Notification access to read progress/media/timer notifications.
+- Display-over-other-apps permission to show the indicator.
+- Accessibility permission is optional and used for fullscreen window-boundary detection. PBar does not read or store on-screen text.
 
-PBar only displays information that Android and source apps expose through notifications. It cannot infer exact download or song progress when the source app does not publish it.
+PBar can only show exact progress when Android or the source app exposes suitable progress, timer, or media-session metadata. If a source exposes no usable duration/position, PBar uses an animated indeterminate indicator instead.
 
 ## Build
 
-Open the project in Android Studio or build with Gradle 9.6.0. GitHub Actions builds and publishes signed APK releases from the main branch.
+Open the project in Android Studio or build with Gradle 9.6.0. GitHub Actions builds and publishes APK releases from the main branch.
 
 ## Permissions and privacy
 
-PBar needs notification access to read notification content and progress, and overlay permission to draw its indicator over other apps. Notification data is processed on-device for the indicator. The updater contacts the public GitHub Releases API and downloads the selected APK; Android verifies its package signature during installation.
-
+Notification data is processed on-device for the indicator. The optional accessibility helper checks foreground window bounds and package names to hide the overlay in fullscreen mode; it does not collect screen text. The updater contacts the public GitHub Releases API and downloads the selected APK. Android verifies the package signature during installation.
 
 ## Release signing
 
