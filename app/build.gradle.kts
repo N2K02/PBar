@@ -10,7 +10,7 @@ val versionCodeValue = (versionParts.getOrNull(0)?.toIntOrNull() ?: 1) * 10 + (v
 
 android {
     namespace = "com.n2k02.pbar"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.n2k02.pbar"
