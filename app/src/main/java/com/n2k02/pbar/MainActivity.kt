@@ -230,7 +230,7 @@ class MainActivity : ComponentActivity() {
                                                         prefs.edit().putStringSet("ignored_packages", updated).apply()
                                                         if (!track && prefs.getString("signal_package", null) == packageName) {
                                                             prefs.edit().putBoolean("has_signal", false).apply()
-                                                            sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(packageName = this@MainActivity.packageName))
+                                                            sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
                                                         }
                                                     }
                                                 )
