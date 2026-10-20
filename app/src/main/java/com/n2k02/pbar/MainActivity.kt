@@ -281,12 +281,11 @@ class MainActivity : ComponentActivity() {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Show on lock screen", style = MaterialTheme.typography.titleSmall)
-                                            Text("Allow the indicator on the lock screen. Requires the optional PBar accessibility helper to be enabled.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Allow the indicator on the lock screen. Android may restrict overlays on some secure lock screens.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         Switch(checked = showOnLockScreen, onCheckedChange = { value ->
                                             showOnLockScreen = value
                                             prefs.edit().putBoolean("show_on_lock_screen", value).apply()
-                                            if (value) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                                             if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
                                         })
                                     }
