@@ -262,14 +262,15 @@ class MainActivity : ComponentActivity() {
                                         if (downloading) {
                                             LinearProgressIndicator(progress = { downloadProgress / 100f }, modifier = Modifier.fillMaxWidth())
                                         }
-                                        if (downloadedUri != null) {
+                                        val installUri = downloadedUri
+                                    if (installUri != null) {
                                             Button(
                                                 onClick = {
                                                     if (!packageManager.canRequestPackageInstalls()) {
                                                         startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
                                                     } else {
                                                         startActivity(Intent(Intent.ACTION_VIEW)
-                                                            .setDataAndType(downloadedUri, "application/vnd.android.package-archive")
+                                                            .setDataAndType(installUri, "application/vnd.android.package-archive")
                                                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                                                     }
                                                 },
