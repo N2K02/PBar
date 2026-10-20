@@ -36,11 +36,11 @@ class FloatingIndicatorService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) { render() }
     }
 
-    override fun onCreate() {
+    @Suppress("DEPRECATION")\n    override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL), RECEIVER_NOT_EXPORTED)
-        else { @Suppress("DEPRECATION") registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL)) }
+        else { registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL)) }
         if (Settings.canDrawOverlays(this)) render()
     }
 
