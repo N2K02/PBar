@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
@@ -43,7 +44,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), UPDATES("Updates") }
+private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), UPDATES("Updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,6 +68,8 @@ class MainActivity : ComponentActivity() {
         var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
+        var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
+        var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
         var latestVersion by remember { mutableStateOf<String?>(null) }
         var apkUrl by remember { mutableStateOf<String?>(null) }
         var releaseUrl by remember { mutableStateOf("https://github.com/N2K02/PBar/releases/latest") }
@@ -95,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     NavigationBar {
                         NavigationBarItem(selected = tab == Tab.HOME, onClick = { tab = Tab.HOME }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
                         NavigationBarItem(selected = tab == Tab.STYLE, onClick = { tab = Tab.STYLE }, icon = { Icon(Icons.Default.Palette, null) }, label = { Text("Appearance") })
+                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet() }, icon = { Icon(Icons.Default.Tune, null) }, label = { Text("Apps") })
                         NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { tab = Tab.UPDATES }, icon = { Icon(Icons.Default.SystemUpdate, null) }, label = { Text("Updates") })
                     }
                 }
@@ -187,6 +191,56 @@ class MainActivity : ComponentActivity() {
                                     Text("“Near camera” is an approximate top-center position; exact placement depends on the device's cutout.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
+                        }
+                        Tab.APPS -> {
+                            Text("Choose which apps PBar tracks", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text("PBar remembers apps that have published a progress or media notification. Turn tracking off for apps you do not want shown. This filter is stored on your device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedButton(onClick = {
+                                            knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
+                                            ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
+                                        }, modifier = Modifier.weight(1f)) { Text("Refresh list") }
+                                        OutlinedButton(onClick = {
+                                            ignoredPackages = emptySet()
+                                            prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
+                                        }, modifier = Modifier.weight(1f)) { Text("Track all") }
+                                    }
+                                    if (knownPackages.isEmpty()) {
+                                        Text("No source apps detected yet. Enable notification access, then play media or start a download and return here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    } else {
+                                        val detectedApps = knownPackages.map { packageName ->
+                                            val label = runCatching {
+                                                packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
+                                            }.getOrDefault(packageName)
+                                            packageName to label
+                                        }.sortedBy { it.second.lowercase() }
+                                        detectedApps.forEach { (packageName, label) ->
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(label, style = MaterialTheme.typography.titleMedium)
+                                                    Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Switch(
+                                                    checked = packageName !in ignoredPackages,
+                                                    onCheckedChange = { track ->
+                                                        val updated = if (track) ignoredPackages - packageName else ignoredPackages + packageName
+                                                        ignoredPackages = updated
+                                                        prefs.edit().putStringSet("ignored_packages", updated).apply()
+                                                        if (!track && prefs.getString("signal_package", null) == packageName) {
+                                                            prefs.edit().putBoolean("has_signal", false).apply()
+                                                            sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(packageName = this@MainActivity.packageName))
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                            if (packageName != detectedApps.last().first) HorizontalDivider()
+                                        }
+                                    }
+                                }
+                            }
+                            Text("Unlike a global on/off switch, app filtering lets downloads and media from your preferred apps remain visible while unwanted sources stay hidden.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Tab.UPDATES -> {
                             Text("App updates", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
