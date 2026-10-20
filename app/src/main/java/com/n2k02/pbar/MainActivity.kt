@@ -68,6 +68,8 @@ class MainActivity : ComponentActivity() {
         var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
+        var customColorHex by remember { mutableStateOf(prefs.getString("indicator_custom_color", "#8B5CF6") ?: "#8B5CF6") }
+        var customColorMessage by remember { mutableStateOf("") }
         var hideFullscreen by remember { mutableStateOf(prefs.getBoolean("hide_fullscreen", false)) }
         var showOnLockScreen by remember { mutableStateOf(prefs.getBoolean("show_on_lock_screen", false)) }
         var showForDownloads by remember { mutableStateOf(prefs.getBoolean("show_for_downloads", true)) }
@@ -197,10 +199,28 @@ class MainActivity : ComponentActivity() {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Use app colour", style = MaterialTheme.typography.titleMedium)
-                                            Text("Uses the source notification's colour when available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Uses the source notification's colour when available. A custom colour is used when no source colour is available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         Switch(checked = appColor, onCheckedChange = { appColor = it; prefs.edit().putBoolean("app_color", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
                                     }
+                                    OutlinedTextField(
+                                        value = customColorHex,
+                                        onValueChange = { customColorHex = it; customColorMessage = "" },
+                                        label = { Text("Default colour (hex)") },
+                                        supportingText = { Text(customColorMessage.ifBlank { "Example: #8B5CF6" }) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    OutlinedButton(onClick = {
+                                        val normalized = if (customColorHex.startsWith("#")) customColorHex else "#$customColorHex"
+                                        val valid = runCatching { android.graphics.Color.parseColor(normalized) }.isSuccess
+                                        if (valid) {
+                                            customColorHex = normalized
+                                            prefs.edit().putString("indicator_custom_color", normalized).apply()
+                                            customColorMessage = "Saved"
+                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                        } else customColorMessage = "Enter a valid hex colour, such as #8B5CF6"
+                                    }, modifier = Modifier.fillMaxWidth()) { Text("Apply custom colour") }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
                                     val positionOptions = if (style == "ring") {
                                         listOf("top" to "Top centre", "camera" to "Near camera", "bottom" to "Bottom centre")
