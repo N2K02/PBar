@@ -51,7 +51,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        prefs.edit().putBoolean("overlay_enabled", true).putString("style", "line").apply()
+        val legacy = prefs.edit().putBoolean("overlay_enabled", true).putString("style", "line")
+        prefs.all.forEach { (key, value) ->
+            if (key.startsWith("app_") && key.endsWith("_style") && value == "ring") legacy.remove(key)
+            if (key.endsWith("_position") && value == "camera") legacy.putString(key, "top")
+        }
+        legacy.apply()
         if (!prefs.getBoolean("camera_ring_defaults_v2", false)) {
             val editor = prefs.edit().putBoolean("camera_ring_defaults_v2", true)
             if (prefs.getInt("ring_size", 68) == 68) editor.putInt("ring_size", 36)
@@ -253,9 +258,7 @@ class MainActivity : ComponentActivity() {
                                         } else customColorMessage = "Enter a valid hex colour, such as #8B5CF6"
                                     }, modifier = Modifier.fillMaxWidth()) { Text("Apply custom colour") }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
-                                    val positionOptions = if (style == "ring") {
-                                        listOf("top" to "Top edge", "bottom" to "Bottom edge")
-                                    } else if (orientation == "vertical") {
+                                    val positionOptions = if (orientation == "vertical") {
                                         listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
                                     } else {
                                         listOf("top" to "Top edge", "bottom" to "Bottom edge")
