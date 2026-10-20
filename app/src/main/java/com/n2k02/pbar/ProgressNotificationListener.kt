@@ -19,7 +19,11 @@ import android.service.notification.StatusBarNotification
 
 class ProgressNotificationListener : NotificationListenerService() {
     private lateinit var mediaSessions: MediaSessionManager
-    private val registeredControllers = mutableMapOf<MediaController, MediaController.Callback>()
+    // One controller + callback per media session, keyed by session token. getActiveSessions()
+    // returns brand-new MediaController objects on every call, so keying by the object made every
+    // refresh unregister and re-register every callback.
+    private val registeredControllers = mutableMapOf<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
+    private var lastActiveTokens: Set<MediaSession.Token> = emptySet()
     private val notificationControllers = mutableMapOf<String, MediaController>()
     // The overlay lives here because Android binds and restarts this service itself.
     private var overlayController: OverlayController? = null
@@ -60,6 +64,14 @@ class ProgressNotificationListener : NotificationListenerService() {
             refreshMediaSessions(currentMediaControllers())
         }
     }
+    private val refreshRunnable = Runnable { refreshMediaSessions(currentMediaControllers()) }
+
+    /** Coalesces bursts of events (callbacks, ranking updates) into a single session query. */
+    private fun requestRefresh() {
+        progressHandler.removeCallbacks(refreshRunnable)
+        progressHandler.postDelayed(refreshRunnable, 50L)
+    }
+
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         refreshMediaSessions((controllers.orEmpty() + notificationControllers.values).distinctBy { it.sessionToken })
     }
@@ -107,9 +119,13 @@ class ProgressNotificationListener : NotificationListenerService() {
         if (!::mediaSessions.isInitialized) return emptyList()
         return runCatching {
             mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
-        }.onSuccess { sessionQueryError = "" }
-            .onFailure { sessionQueryError = "session query: " + it.javaClass.simpleName + ": " + (it.message ?: "no details") }
-            .getOrDefault(emptyList())
+        }.onSuccess { sessions ->
+            sessionQueryError = ""
+            lastActiveTokens = sessions.map { it.sessionToken }.toSet()
+        }.onFailure {
+            sessionQueryError = "session query: " + it.javaClass.simpleName + ": " + (it.message ?: "no details")
+            lastActiveTokens = emptySet()
+        }.getOrDefault(emptyList())
     }
 
     private fun currentMediaControllers(): List<MediaController> {
@@ -125,35 +141,80 @@ class ProgressNotificationListener : NotificationListenerService() {
         }
     }
 
-    private fun refreshMediaSessions(controllers: List<MediaController>) {
-        val active = controllers.toSet()
-        registeredControllers.keys.filter { it !in active }.forEach { controller ->
-            registeredControllers.remove(controller)?.let { callback -> runCatching { controller.unregisterCallback(callback) } }
+    /** Never let a failure while reading sessions take the listener down; surface it instead. */
+    private fun refreshMediaSessions(incoming: List<MediaController>) {
+        runCatching { refreshMediaSessionsUnsafe(incoming) }.onFailure { error ->
+            getSharedPreferences("pbar", MODE_PRIVATE).edit()
+                .putString("diagnostic_session_error", "refresh failed: " + error.javaClass.simpleName + ": " + (error.message ?: "no details"))
+                .apply()
         }
-        controllers.forEach { controller ->
-            if (!registeredControllers.containsKey(controller)) {
+    }
+
+    private fun playbackStateName(state: Int?): String = when (state) {
+        null -> "none published"
+        PlaybackState.STATE_NONE -> "none (0)"
+        PlaybackState.STATE_STOPPED -> "stopped"
+        PlaybackState.STATE_PAUSED -> "paused"
+        PlaybackState.STATE_PLAYING -> "playing"
+        PlaybackState.STATE_FAST_FORWARDING -> "fast-forwarding"
+        PlaybackState.STATE_REWINDING -> "rewinding"
+        PlaybackState.STATE_BUFFERING -> "buffering"
+        PlaybackState.STATE_ERROR -> "error"
+        else -> "state $state"
+    }
+
+    /** Lists the media/progress notifications currently posted, so lookups can be checked by eye. */
+    private fun notificationProbe(): String = runCatching {
+        activeNotifications.orEmpty()
+            .filter { !isIgnoredPackage(it.packageName) && (isMediaNotification(it) || isIndicatorNotification(it)) }
+            .take(6)
+            .joinToString("\n") { sbn ->
+                val kind = if (isMediaNotification(sbn)) {
+                    val hasToken = sbn.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
+                    "media notification (" + (if (hasToken) "has" else "no") + " session token)"
+                } else "progress notification"
+                sbn.packageName + ": " + kind
+            }
+            .ifBlank { "No media or progress notifications are posted right now" }
+    }.getOrElse { "Could not read notifications: " + it.javaClass.simpleName }
+
+    private fun refreshMediaSessionsUnsafe(incoming: List<MediaController>) {
+        val fresh = incoming.distinctBy { it.sessionToken }
+        val tokens = fresh.map { it.sessionToken }.toSet()
+        registeredControllers.keys.filter { it !in tokens }.forEach { token ->
+            registeredControllers.remove(token)?.let { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
+        }
+        // Reuse the already-registered controller for a session; only register new sessions.
+        val controllers = fresh.map { candidate ->
+            registeredControllers[candidate.sessionToken]?.first ?: run {
                 val callback = object : MediaController.Callback() {
-                    override fun onPlaybackStateChanged(state: PlaybackState?) {
-                        refreshMediaSessions(currentMediaControllers())
-                    }
-                    override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {
-                        refreshMediaSessions(currentMediaControllers())
+                    override fun onPlaybackStateChanged(state: PlaybackState?) = requestRefresh()
+                    override fun onMetadataChanged(metadata: android.media.MediaMetadata?) = requestRefresh()
+                    override fun onSessionDestroyed() {
+                        // A destroyed session left behind by an old notification would otherwise
+                        // linger as a dead "no state" entry until that notification is removed.
+                        notificationControllers.entries.removeAll { it.value.sessionToken == candidate.sessionToken }
+                        requestRefresh()
                     }
                 }
-                registeredControllers[controller] = callback
-                runCatching { controller.registerCallback(callback) }
+                runCatching { candidate.registerCallback(callback, progressHandler) }
+                registeredControllers[candidate.sessionToken] = candidate to callback
+                candidate
             }
         }
         controllers.forEach { rememberSourcePackage(it.packageName) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        val sessionSummary = controllers.take(8).joinToString(" | ") { controller ->
+        val sessionSummary = controllers.take(8).joinToString("\n") { controller ->
             val state = controller.playbackState
             val duration = controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-            controller.packageName + ":" + (state?.state?.toString() ?: "no-state") + ":" + duration + "ms"
+            val source = if (controller.sessionToken in lastActiveTokens) "active session" else "from notification"
+            controller.packageName + " [" + source + "] state: " + playbackStateName(state?.state) +
+                ", position " + (state?.position ?: -1L) + " ms, duration " + duration + " ms"
         }.ifBlank { "No active media sessions returned by Android" }
         prefs.edit()
             .putInt("diagnostic_session_count", controllers.size)
             .putString("diagnostic_session_summary", sessionSummary)
+            .putString("diagnostic_notification_summary", notificationProbe())
             .putString("diagnostic_session_error", listOf(sessionSetupError, sessionQueryError).filter { it.isNotBlank() }.joinToString(" | "))
             .putLong("diagnostic_last_session_check", System.currentTimeMillis())
             .apply()
@@ -258,9 +319,10 @@ class ProgressNotificationListener : NotificationListenerService() {
         unregisterRefreshReceiver()
         overlayController?.stop()
         overlayController = null
-        registeredControllers.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
+        registeredControllers.values.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
         registeredControllers.clear()
         progressHandler.removeCallbacks(progressTicker)
+        progressHandler.removeCallbacks(refreshRunnable)
         stopTimerTicker()
         if (::mediaSessions.isInitialized) runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
         notificationControllers.clear()
@@ -270,7 +332,10 @@ class ProgressNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) = consume(sbn)
     override fun onNotificationRankingUpdate(rankingMap: RankingMap?) {
-        activeNotifications?.forEach(::consume)
+        // Ranking updates fire constantly. Re-consuming every notification here ran a full media
+        // session query per media notification and let a download overwrite an active media signal.
+        // One coalesced refresh covers it (it re-reads remaining progress notifications itself).
+        requestRefresh()
     }
 
     private fun consume(sbn: StatusBarNotification) {
