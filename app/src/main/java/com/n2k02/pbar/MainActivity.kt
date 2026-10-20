@@ -1,10 +1,12 @@
 package com.n2k02.pbar
 
+import android.app.DownloadManager
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -66,6 +69,9 @@ class MainActivity : ComponentActivity() {
         var releaseUrl by remember { mutableStateOf("https://github.com/N2K02/PBar/releases/latest") }
         var updateMessage by remember { mutableStateOf("Check GitHub for the latest PBar release.") }
         var checking by remember { mutableStateOf(false) }
+        var downloading by remember { mutableStateOf(false) }
+        var downloadProgress by remember { mutableStateOf(0) }
+        var downloadedUri by remember { mutableStateOf<Uri?>(null) }
 
         val dark = isSystemInDarkTheme()
         val scheme = when {
@@ -203,7 +209,73 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.fillMaxWidth()
                                     ) { Icon(Icons.Default.Download, null); Spacer(Modifier.width(8.dp)); Text(if (checking) "Checking…" else "Check for updates") }
                                     if (latestVersion != null && latestVersion != BuildConfig.VERSION_NAME) {
-                                        Button(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl ?: releaseUrl))) }, modifier = Modifier.fillMaxWidth()) { Text("Download version $latestVersion") }
+                                        Button(
+                                            enabled = !downloading && apkUrl != null,
+                                            onClick = {
+                                                val url = apkUrl ?: return@Button
+                                                lifecycleScope.launch {
+                                                    downloading = true
+                                                    downloadProgress = 0
+                                                    downloadedUri = null
+                                                    try {
+                                                        val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+                                                        val request = DownloadManager.Request(Uri.parse(url))
+                                                            .setTitle("PBar $latestVersion")
+                                                            .setDescription("Downloading app update")
+                                                            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                                            .setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, "PBar-$latestVersion.apk")
+                                                        val id = manager.enqueue(request)
+                                                        var finished = false
+                                                        while (!finished) {
+                                                            val cursor = manager.query(DownloadManager.Query().setFilterById(id))
+                                                            cursor.use {
+                                                                if (!it.moveToFirst()) error("Download could not be found.")
+                                                                when (it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                                                                    DownloadManager.STATUS_SUCCESSFUL -> {
+                                                                        downloadedUri = manager.getUriForDownloadedFile(id) ?: error("Downloaded APK is unavailable.")
+                                                                        downloadProgress = 100
+                                                                        finished = true
+                                                                    }
+                                                                    DownloadManager.STATUS_FAILED -> {
+                                                                        val reason = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                                                                        error("Download failed (code $reason).")
+                                                                    }
+                                                                    else -> {
+                                                                        val done = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                                                                        val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                                                                        if (total > 0) downloadProgress = ((done * 100) / total).toInt().coerceIn(0, 100)
+                                                                    }
+                                                                }
+                                                            }
+                                                            if (!finished) delay(500)
+                                                        }
+                                                        updateMessage = "Download complete. Install the update when ready."
+                                                    } catch (e: Exception) {
+                                                        updateMessage = e.message ?: "Download failed. Please try again."
+                                                    } finally {
+                                                        downloading = false
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text(if (downloading) "Downloading $downloadProgress%" else "Download version $latestVersion") }
+                                        if (downloading) {
+                                            LinearProgressIndicator(progress = { downloadProgress / 100f }, modifier = Modifier.fillMaxWidth())
+                                        }
+                                        if (downloadedUri != null) {
+                                            Button(
+                                                onClick = {
+                                                    if (!packageManager.canRequestPackageInstalls()) {
+                                                        startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                                                    } else {
+                                                        startActivity(Intent(Intent.ACTION_VIEW)
+                                                            .setDataAndType(downloadedUri, "application/vnd.android.package-archive")
+                                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) { Text("Install update") }
+                                        }
                                     }
                                     OutlinedButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl))) }, modifier = Modifier.fillMaxWidth()) { Text("View GitHub release") }
                                 }
