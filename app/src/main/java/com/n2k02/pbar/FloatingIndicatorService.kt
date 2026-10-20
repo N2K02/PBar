@@ -10,29 +10,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.graphics.PixelFormat
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.setContent
-import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.unit.dp
 
 class FloatingIndicatorService : Service() {
     private var overlay: View? = null
@@ -46,7 +33,7 @@ class FloatingIndicatorService : Service() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL), RECEIVER_NOT_EXPORTED)
-        else { registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL)) }
+        else registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL))
         if (Settings.canDrawOverlays(this)) render()
     }
 
@@ -83,18 +70,22 @@ class FloatingIndicatorService : Service() {
     private fun render() {
         if (!Settings.canDrawOverlays(this)) return
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false)) { removeOverlay(); return }
+        if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false)) {
+            removeOverlay()
+            return
+        }
         val isRing = prefs.getString("style", "line") == "ring"
         val params = WindowManager.LayoutParams(
             if (isRing) dp(68) else WindowManager.LayoutParams.MATCH_PARENT,
             if (isRing) dp(68) else dp(5),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            android.graphics.PixelFormat.TRANSLUCENT
         ).apply {
             gravity = when (prefs.getString("position", "top")) {
                 "bottom" -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                "camera" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
             }
             y = when (prefs.getString("position", "top")) {
@@ -104,41 +95,70 @@ class FloatingIndicatorService : Service() {
             }
         }
         removeOverlay()
-        val view = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent {
-                val current = getSharedPreferences("pbar", MODE_PRIVATE)
-                val progress = current.getInt("signal_progress", 0)
-                val indeterminate = current.getBoolean("signal_indeterminate", false)
-                val media = current.getBoolean("signal_media", false)
-                val signal = current.getBoolean("has_signal", false)
-                MaterialTheme {
-                    if (isRing) {
-                        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)) {
-                            Box(Modifier.fillMaxSize().padding(5.dp), contentAlignment = Alignment.Center) {
-                                Canvas(Modifier.fillMaxSize()) {
-                                    val stroke = 4.dp.toPx()
-                                    drawArc(MaterialTheme.colorScheme.surfaceVariant, -90f, 360f, false, style = Stroke(stroke))
-                                    if (signal && !media) drawArc(MaterialTheme.colorScheme.primary, -90f, if (indeterminate) 110f else progress * 3.6f, false, style = Stroke(stroke, cap = StrokeCap.Round))
-                                    else if (signal) drawArc(MaterialTheme.colorScheme.tertiary, -90f, 250f, false, style = Stroke(stroke, cap = StrokeCap.Round))
-                                }
-                                Text(if (media) "♫" else if (signal && !indeterminate) "$progress%" else "•", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    } else {
-                        Canvas(Modifier.fillMaxSize()) {
-                            drawRect(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
-                            if (signal) {
-                                val width = if (media || indeterminate) size.width * 0.35f else size.width * progress / 100f
-                                drawRect(if (media) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary, size = androidx.compose.ui.geometry.Size(width, size.height))
-                            }
-                        }
-                    }
-                }
-            }
+        val view = IndicatorView(this, isRing).apply {
+            updateFrom(prefs)
         }
         overlay = view
         runCatching { wm.addView(view, params) }.onFailure { overlay = null }
+    }
+
+    private inner class IndicatorView(context: Context, private val ring: Boolean) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val bounds = RectF()
+        private var progress = 0
+        private var indeterminate = false
+        private var media = false
+        private var signal = false
+
+        fun updateFrom(prefs: android.content.SharedPreferences) {
+            progress = prefs.getInt("signal_progress", 0).coerceIn(0, 100)
+            indeterminate = prefs.getBoolean("signal_indeterminate", false)
+            media = prefs.getBoolean("signal_media", false)
+            signal = prefs.getBoolean("has_signal", false)
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val density = resources.displayMetrics.density
+            val primary = Color.rgb(103, 80, 164)
+            val secondary = Color.rgb(121, 116, 126)
+            val tertiary = Color.rgb(0, 105, 92)
+            if (ring) {
+                val stroke = 4.5f * density
+                val inset = stroke
+                bounds.set(inset, inset, width - inset, height - inset)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = stroke
+                paint.strokeCap = Paint.Cap.ROUND
+                paint.color = Color.argb(225, 240, 238, 246)
+                canvas.drawArc(bounds, 0f, 360f, false, paint)
+                if (signal) {
+                    paint.color = if (media) tertiary else primary
+                    val sweep = when {
+                        media || indeterminate -> 115f
+                        else -> progress * 3.6f
+                    }
+                    canvas.drawArc(bounds, -90f, sweep, false, paint)
+                }
+                paint.style = Paint.Style.FILL
+                paint.color = Color.WHITE
+                paint.textAlign = Paint.Align.CENTER
+                paint.textSize = 11f * density
+                paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                val label = if (media) "♫" else if (signal && !indeterminate) "$progress%" else "•"
+                canvas.drawText(label, width / 2f, height / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
+            } else {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.argb(170, 121, 116, 126)
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+                if (signal) {
+                    paint.color = if (media) tertiary else primary
+                    val segment = if (media || indeterminate) width * 0.35f else width * progress / 100f
+                    canvas.drawRect(0f, 0f, segment, height.toFloat(), paint)
+                }
+            }
+        }
     }
 
     private fun removeOverlay() {
@@ -147,11 +167,13 @@ class FloatingIndicatorService : Service() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
     override fun onDestroy() {
         runCatching { unregisterReceiver(refreshReceiver) }
         removeOverlay()
         super.onDestroy()
     }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
