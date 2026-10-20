@@ -1,6 +1,7 @@
 package com.n2k02.pbar
 
 import android.app.DownloadManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
@@ -50,6 +51,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        val legacy = prefs.edit().putBoolean("overlay_enabled", true).putString("style", "line")
+        prefs.all.forEach { (key, value) ->
+            if (key.startsWith("app_") && key.endsWith("_style") && value == "ring") legacy.remove(key)
+            if (key.endsWith("_position") && value == "camera") legacy.putString(key, "top")
+        }
+        legacy.apply()
         if (!prefs.getBoolean("camera_ring_defaults_v2", false)) {
             val editor = prefs.edit().putBoolean("camera_ring_defaults_v2", true)
             if (prefs.getInt("ring_size", 68) == 68) editor.putInt("ring_size", 36)
@@ -67,6 +74,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        prefs.edit().putBoolean("overlay_enabled", true).apply()
+        if (Settings.canDrawOverlays(this)) {
+            startService(Intent(this, FloatingIndicatorService::class.java))
+        }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     private fun PBarApp() {
@@ -74,8 +90,8 @@ class MainActivity : ComponentActivity() {
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
-        var overlayEnabled by remember { mutableStateOf(prefs.getBoolean("overlay_enabled", false)) }
-        var style by remember { mutableStateOf(prefs.getString("style", "line") ?: "line") }
+        var overlayEnabled by remember { mutableStateOf(true) }
+        var style by remember { mutableStateOf("line") }
         var position by remember { mutableStateOf(prefs.getString("position", "top") ?: "top") }
         var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
@@ -150,43 +166,54 @@ class MainActivity : ComponentActivity() {
                 ) {
                     when (tab) {
                         Tab.HOME -> {
-                            Text("Your progress, at a glance", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("PBar can show progress from apps that publish it in notifications, plus a small indicator for media notifications.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                maxItemsInEachRow = if (landscape) 2 else 1
-                            ) {
-                                ElevatedCard(Modifier.fillMaxWidth(if (landscape) 0.48f else 1f)) {
-                                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text("Floating indicator", style = MaterialTheme.typography.titleLarge)
-                                        Text(if (overlayEnabled) "Enabled — the indicator can appear over other apps." else "Off — turn it on to show the indicator outside PBar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Button(
-                                            onClick = {
-                                                if (!Settings.canDrawOverlays(this@MainActivity)) {
-                                                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-                                                } else {
-                                                    overlayEnabled = !overlayEnabled
-                                                    prefs.edit().putBoolean("overlay_enabled", overlayEnabled).apply()
-                                                    if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
-                                                    else stopService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text(if (!Settings.canDrawOverlays(this@MainActivity)) "Grant overlay permission" else if (overlayEnabled) "Turn indicator off" else "Turn indicator on") }
-                                        OutlinedButton(
-                                            onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text("Set up notification access") }
+                            val overlayReady = Settings.canDrawOverlays(this@MainActivity)
+                            val listenerReady = runCatching {
+                                val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
+                                enabled.split(':').any { it.equals(ComponentName(this@MainActivity, ProgressNotificationListener::class.java).flattenToString(), ignoreCase = true) }
+                            }.getOrDefault(false)
+                            Text("PBar runs in the background", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text("Once permissions are granted, PBar watches supported notifications and shows a progress bar automatically. No on/off switch is needed.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Palette, contentDescription = null, tint = if (overlayReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Display over other apps", style = MaterialTheme.typography.titleMedium)
+                                            Text(if (overlayReady) "Permission granted" else "Required to show the progress bar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Text(if (overlayReady) "Ready" else "Needed", style = MaterialTheme.typography.labelMedium)
                                     }
+                                    if (!overlayReady) {
+                                        Button(onClick = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }, modifier = Modifier.fillMaxWidth()) {
+                                            Text("Grant overlay permission")
+                                        }
+                                    }
+                                    HorizontalDivider()
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Tune, contentDescription = null, tint = if (listenerReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Notification access", style = MaterialTheme.typography.titleMedium)
+                                            Text(if (listenerReady) "PBar can read supported progress and media notifications" else "Required to detect progress and media", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Text(if (listenerReady) "Ready" else "Needed", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                    if (!listenerReady) {
+                                        OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth()) {
+                                            Text("Grant notification access")
+                                        }
+                                    }
+                                    Text("PBar uses a regular background service without a permanent PBar notification. Android may still stop it under battery or memory pressure.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                ElevatedCard(Modifier.fillMaxWidth(if (landscape) 0.48f else 1f)) {
-                                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("What PBar can detect", style = MaterialTheme.typography.titleMedium)
-                                        Text("• Download or transfer progress when the source notification exposes progress.")
-                                        Text("• Media notifications, shown as a music indicator.")
-                                        Text("Some apps do not publish exact progress. PBar cannot show data that Android or the source app does not provide.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Make it yours", style = MaterialTheme.typography.titleLarge)
+                                    Text("Change bar position, orientation, thickness, colour, opacity, and corner style in Appearance. Choose which apps PBar watches in Apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(onClick = { tab = Tab.STYLE }) { Text("Appearance") }
+                                        OutlinedButton(onClick = { tab = Tab.APPS }) { Text("Choose apps") }
                                     }
                                 }
                             }
@@ -196,14 +223,11 @@ class MainActivity : ComponentActivity() {
                             Text("Changes are saved immediately.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("Shape", style = MaterialTheme.typography.titleMedium)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        FilterChip(selected = style == "line", onClick = { style = "line"; prefs.edit().putString("style", style).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Progress line") })
-                                        FilterChip(selected = style == "ring", onClick = { style = "ring"; prefs.edit().putString("style", style).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Ring") })
-                                    }
+                                    Text("Progress bar", style = MaterialTheme.typography.titleMedium)
+                                    Text("Bar only — ring mode has been removed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Orientation", style = MaterialTheme.typography.titleMedium)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "camera", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Horizontal") })
+                                        FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Horizontal") })
                                         FilterChip(selected = orientation == "vertical", onClick = { orientation = "vertical"; if (position !in listOf("left", "center", "right")) position = "left"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Vertical") })
                                     }
                                     Text("Thickness: $thickness dp", style = MaterialTheme.typography.titleMedium)
@@ -234,12 +258,10 @@ class MainActivity : ComponentActivity() {
                                         } else customColorMessage = "Enter a valid hex colour, such as #8B5CF6"
                                     }, modifier = Modifier.fillMaxWidth()) { Text("Apply custom colour") }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
-                                    val positionOptions = if (style == "ring") {
-                                        listOf("top" to "Top centre", "camera" to "Near camera", "bottom" to "Bottom centre")
-                                    } else if (orientation == "vertical") {
+                                    val positionOptions = if (orientation == "vertical") {
                                         listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
                                     } else {
-                                        listOf("top" to "Top edge", "camera" to "Near camera", "bottom" to "Bottom edge")
+                                        listOf("top" to "Top edge", "bottom" to "Bottom edge")
                                     }
                                     positionOptions.forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -247,19 +269,7 @@ class MainActivity : ComponentActivity() {
                                             Text(label)
                                         }
                                     }
-                                    Text("“Near camera” is an approximate top-center position; exact placement depends on the device's cutout.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (style == "ring") {
-                                        HorizontalDivider()
-                                        Text("Camera-hole calibration", style = MaterialTheme.typography.titleMedium)
-                                        Text("Ring size: $ringSize dp", style = MaterialTheme.typography.bodyMedium)
-                                        Slider(value = ringSize.toFloat(), onValueChange = { ringSize = it.toInt().coerceIn(24, 80); prefs.edit().putInt("ring_size", ringSize).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 24f..80f, steps = 55)
-                                        Text("Horizontal offset: $ringOffsetX dp", style = MaterialTheme.typography.bodyMedium)
-                                        Slider(value = ringOffsetX.toFloat(), onValueChange = { ringOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("ring_offset_x", ringOffsetX).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = -150f..150f, steps = 59)
-                                        Text("Vertical offset: $ringOffsetY dp", style = MaterialTheme.typography.bodyMedium)
-                                        Slider(value = ringOffsetY.toFloat(), onValueChange = { ringOffsetY = it.toInt().coerceIn(0, 80); prefs.edit().putInt("ring_offset_y", ringOffsetY).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 0f..80f, steps = 39)
-                                        Text("Ring stroke: $ringStroke dp", style = MaterialTheme.typography.bodyMedium)
-                                        Slider(value = ringStroke.toFloat(), onValueChange = { ringStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("ring_stroke", ringStroke).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 2f..10f, steps = 7)
-                                    }
+
                                     HorizontalDivider()
                                     Text("Appearance details", style = MaterialTheme.typography.titleMedium)
                                     Text("Opacity: $indicatorOpacity%", style = MaterialTheme.typography.bodyMedium)
@@ -425,9 +435,9 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Style", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { styleMenuExpanded = true }) { Text(when (appStyle) { "line" -> "Line"; "ring" -> "Ring"; else -> "Default" }) }
+                                                            TextButton(onClick = { styleMenuExpanded = true }) { Text(when (appStyle) { "line" -> "Line"; else -> "Default" }) }
                                                             DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
-                                                                listOf("default" to "Default", "line" to "Line", "ring" to "Ring").forEach { (value, label) ->
+                                                                listOf("default" to "Default", "line" to "Line").forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appStyle = value
                                                                         val edit = prefs.edit()
@@ -459,9 +469,8 @@ class MainActivity : ComponentActivity() {
                                                             Text("Position", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { positionMenuExpanded = true }) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
                                                             DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
-                                                                (if (appStyle == "ring" || (appStyle == "default" && style == "ring") ||
-                                                                    (appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
-                                                                    listOf("default" to "Default", "top" to "Top", "camera" to "Near camera", "bottom" to "Bottom")
+                                                                (if ((appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
+                                                                    listOf("default" to "Default", "top" to "Top", "bottom" to "Bottom")
                                                                 } else {
                                                                     listOf("default" to "Default", "left" to "Left", "center" to "Centre", "right" to "Right")
                                                                 }).forEach { (value, label) ->
@@ -478,16 +487,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                         Text("Thickness: $appThickness dp", style = MaterialTheme.typography.bodySmall)
                                                         Slider(value = appThickness.toFloat(), onValueChange = { appThickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("app_${packageName}_thickness", appThickness).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..12f, steps = 9)
-                                                        if (appStyle == "ring") {
-                                                            Text("Ring size: $appRingSize dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingSize.toFloat(), onValueChange = { appRingSize = it.toInt().coerceIn(24, 80); prefs.edit().putInt("app_${packageName}_ring_size", appRingSize).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 24f..80f, steps = 55)
-                                                            Text("Camera X offset: $appRingOffsetX dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingOffsetX.toFloat(), onValueChange = { appRingOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("app_${packageName}_ring_offset_x", appRingOffsetX).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = -150f..150f, steps = 59)
-                                                            Text("Camera Y offset: $appRingOffsetY dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingOffsetY.toFloat(), onValueChange = { appRingOffsetY = it.toInt().coerceIn(0, 80); prefs.edit().putInt("app_${packageName}_ring_offset_y", appRingOffsetY).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 0f..80f, steps = 39)
-                                                            Text("Ring stroke: $appRingStroke dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingStroke.toFloat(), onValueChange = { appRingStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("app_${packageName}_ring_stroke", appRingStroke).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..10f, steps = 7)
-                                                        }
+
                                                         TextButton(onClick = {
                                                             prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
                                                             appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 36); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 0); appRingStroke = prefs.getInt("ring_stroke", 5)
