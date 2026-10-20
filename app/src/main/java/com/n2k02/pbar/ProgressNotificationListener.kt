@@ -173,11 +173,37 @@ class ProgressNotificationListener : NotificationListenerService() {
         // Media notification refreshes often carry no playback position. Let the
         // MediaSession path own the progress value instead of resetting it to 0.
         if (media) {
+            if (!prefs.getBoolean("show_for_media", true)) return
             if (::mediaSessions.isInitialized) {
                 val controllers = runCatching {
                     mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
                 }.getOrDefault(emptyList())
                 refreshMediaSessions(controllers)
+            }
+            // Some radio/media apps publish a MediaStyle notification but no usable
+            // active MediaSession. Still show a moving, indeterminate bar for them.
+            val current = getSharedPreferences("pbar", MODE_PRIVATE)
+            if (!current.getBoolean("has_signal", false) ||
+                !current.getBoolean("signal_media", false) ||
+                current.getString("signal_package", null) != sbn.packageName) {
+                current.edit()
+                    .putBoolean("has_signal", true)
+                    .putBoolean("signal_media", true)
+                    .putBoolean("signal_playing", true)
+                    .putFloat("signal_speed", 1f)
+                    .putBoolean("signal_timer", false)
+                    .putBoolean("signal_download", false)
+                    .putBoolean("signal_indeterminate", true)
+                    .putInt("signal_progress", 0)
+                    .putLong("signal_duration", 0L)
+                    .putLong("signal_position", 0L)
+                    .putInt("signal_color", n.color)
+                    .putString("signal_package", sbn.packageName)
+                    .putString("signal_title", title.ifBlank { sbn.packageName })
+                    .putString("signal_text", text)
+                    .putLong("signal_updated", System.currentTimeMillis())
+                    .apply()
+                sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             }
             return
         }
