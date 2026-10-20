@@ -134,6 +134,7 @@ class ProgressNotificationListener : NotificationListenerService() {
             val remainingSignals = activeNotifications.orEmpty().filter { notification ->
                 !isIgnoredPackage(notification.packageName) &&
                     notification.packageName !in pausedMediaPackages &&
+                    !isMediaNotification(notification) &&
                     isIndicatorNotification(notification)
             }
             if (remainingSignals.isNotEmpty()) {
@@ -343,7 +344,14 @@ class ProgressNotificationListener : NotificationListenerService() {
             refreshMediaSessions(controllers)
         }
 
-        val remaining = activeNotifications.orEmpty().filter { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
+        // Media notifications are handled exclusively through MediaSession state.
+        // Re-consuming them here would call refreshMediaSessions recursively and can
+        // cause a stack overflow when a stale media notification remains posted.
+        val remaining = activeNotifications.orEmpty().filter {
+            !isIgnoredPackage(it.packageName) &&
+                !isMediaNotification(it) &&
+                isIndicatorNotification(it)
+        }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (remaining.isEmpty()) {
             // refreshMediaSessions already clears stale media sessions. If it left a
@@ -371,16 +379,22 @@ class ProgressNotificationListener : NotificationListenerService() {
             ?.contains(sourcePackage) == true
     }
 
+    private fun isMediaNotification(sbn: StatusBarNotification): Boolean {
+        val notification = sbn.notification ?: return false
+        val extras = notification.extras ?: return false
+        val template = extras.getString("android.template").orEmpty()
+        return notification.category == Notification.CATEGORY_TRANSPORT ||
+            extras.containsKey("android.mediaSession") ||
+            template.contains("MediaStyle", true)
+    }
+
     private fun isIndicatorNotification(sbn: StatusBarNotification): Boolean {
         val notification = sbn.notification ?: return false
         val extras = notification.extras ?: return false
         val hasProgress = extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false) ||
             extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0 ||
             parsePercentage(extras) != null || parseGoogleTimerProgress(sbn) != null
-        val template = extras.getString("android.template").orEmpty()
-        val media = notification.category == Notification.CATEGORY_TRANSPORT ||
-            extras.containsKey("android.mediaSession") ||
-            template.contains("MediaStyle", true)
+        val media = isMediaNotification(sbn)
         val timer = isGoogleTimerNotification(sbn)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         return (hasProgress && prefs.getBoolean("show_for_downloads", true)) ||
