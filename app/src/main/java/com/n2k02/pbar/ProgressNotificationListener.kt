@@ -89,7 +89,7 @@ class ProgressNotificationListener : NotificationListenerService() {
                         refreshMediaSessions(currentMediaControllers())
                     }
                     override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {
-                        refreshMediaSessions(runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList()))
+                        refreshMediaSessions(currentMediaControllers())
                     }
                 }
                 registeredControllers[controller] = callback
