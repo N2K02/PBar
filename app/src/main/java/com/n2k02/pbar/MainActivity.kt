@@ -49,6 +49,18 @@ private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), A
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        if (!prefs.getBoolean("camera_ring_defaults_v2", false)) {
+            val editor = prefs.edit().putBoolean("camera_ring_defaults_v2", true)
+            if (prefs.getInt("ring_size", 68) == 68) editor.putInt("ring_size", 36)
+            if (prefs.getInt("ring_offset_y", 28) == 28) editor.putInt("ring_offset_y", 0)
+            // Migrate only untouched legacy per-app defaults; preserve user-tuned values.
+            prefs.all.forEach { (key, value) ->
+                if (key.startsWith("app_") && key.endsWith("_ring_size") && value == 68) editor.putInt(key, 36)
+                if (key.startsWith("app_") && key.endsWith("_ring_offset_y") && value == 28) editor.putInt(key, 0)
+            }
+            editor.apply()
+        }
         setContent { PBarApp() }
         if (getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("overlay_enabled", false) && Settings.canDrawOverlays(this)) {
             startService(Intent(this, FloatingIndicatorService::class.java))
@@ -75,9 +87,9 @@ class MainActivity : ComponentActivity() {
         var showForDownloads by remember { mutableStateOf(prefs.getBoolean("show_for_downloads", true)) }
         var showForMedia by remember { mutableStateOf(prefs.getBoolean("show_for_media", true)) }
         var showForTimers by remember { mutableStateOf(prefs.getBoolean("show_for_timers", true)) }
-        var ringSize by remember { mutableIntStateOf(prefs.getInt("ring_size", 68).coerceIn(40, 120)) }
+        var ringSize by remember { mutableIntStateOf(prefs.getInt("ring_size", 36).coerceIn(24, 80)) }
         var ringOffsetX by remember { mutableIntStateOf(prefs.getInt("ring_offset_x", 0).coerceIn(-150, 150)) }
-        var ringOffsetY by remember { mutableIntStateOf(prefs.getInt("ring_offset_y", 28).coerceIn(0, 160)) }
+        var ringOffsetY by remember { mutableIntStateOf(prefs.getInt("ring_offset_y", 0).coerceIn(0, 80)) }
         var ringStroke by remember { mutableIntStateOf(prefs.getInt("ring_stroke", 5).coerceIn(2, 10)) }
         var indicatorOpacity by remember { mutableIntStateOf(prefs.getInt("indicator_opacity", 100).coerceIn(20, 100)) }
         var roundedCorners by remember { mutableStateOf(prefs.getBoolean("rounded_corners", true)) }
@@ -240,11 +252,11 @@ class MainActivity : ComponentActivity() {
                                         HorizontalDivider()
                                         Text("Camera-hole calibration", style = MaterialTheme.typography.titleMedium)
                                         Text("Ring size: $ringSize dp", style = MaterialTheme.typography.bodyMedium)
-                                        Slider(value = ringSize.toFloat(), onValueChange = { ringSize = it.toInt().coerceIn(40, 120); prefs.edit().putInt("ring_size", ringSize).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 40f..120f, steps = 39)
+                                        Slider(value = ringSize.toFloat(), onValueChange = { ringSize = it.toInt().coerceIn(24, 80); prefs.edit().putInt("ring_size", ringSize).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 24f..80f, steps = 55)
                                         Text("Horizontal offset: $ringOffsetX dp", style = MaterialTheme.typography.bodyMedium)
                                         Slider(value = ringOffsetX.toFloat(), onValueChange = { ringOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("ring_offset_x", ringOffsetX).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = -150f..150f, steps = 59)
                                         Text("Vertical offset: $ringOffsetY dp", style = MaterialTheme.typography.bodyMedium)
-                                        Slider(value = ringOffsetY.toFloat(), onValueChange = { ringOffsetY = it.toInt().coerceIn(0, 160); prefs.edit().putInt("ring_offset_y", ringOffsetY).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 0f..160f, steps = 39)
+                                        Slider(value = ringOffsetY.toFloat(), onValueChange = { ringOffsetY = it.toInt().coerceIn(0, 80); prefs.edit().putInt("ring_offset_y", ringOffsetY).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 0f..80f, steps = 39)
                                         Text("Ring stroke: $ringStroke dp", style = MaterialTheme.typography.bodyMedium)
                                         Slider(value = ringStroke.toFloat(), onValueChange = { ringStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("ring_stroke", ringStroke).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 2f..10f, steps = 7)
                                     }
@@ -364,10 +376,10 @@ class MainActivity : ComponentActivity() {
                                                     var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
                                                     var appCustomHex by remember(packageName) { mutableStateOf(appColorOverrides[packageName] ?: "") }
                                                     var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)) }
-                                                    var appRingSize by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_size", prefs.getInt("ring_size", 68)).coerceIn(40, 120)) }
+                                                    var appRingSize by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_size", prefs.getInt("ring_size", 36)).coerceIn(24, 80)) }
                                                     var appRingStroke by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_stroke", prefs.getInt("ring_stroke", 5)).coerceIn(2, 10)) }
                                                     var appRingOffsetX by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)) }
-                                                    var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 28)).coerceIn(0, 160)) }
+                                                    var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)) }
                                                     Text(label, style = MaterialTheme.typography.titleMedium)
                                                     Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -468,17 +480,17 @@ class MainActivity : ComponentActivity() {
                                                         Slider(value = appThickness.toFloat(), onValueChange = { appThickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("app_${packageName}_thickness", appThickness).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..12f, steps = 9)
                                                         if (appStyle == "ring") {
                                                             Text("Ring size: $appRingSize dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingSize.toFloat(), onValueChange = { appRingSize = it.toInt().coerceIn(40, 120); prefs.edit().putInt("app_${packageName}_ring_size", appRingSize).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 40f..120f, steps = 39)
+                                                            Slider(value = appRingSize.toFloat(), onValueChange = { appRingSize = it.toInt().coerceIn(24, 80); prefs.edit().putInt("app_${packageName}_ring_size", appRingSize).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 24f..80f, steps = 55)
                                                             Text("Camera X offset: $appRingOffsetX dp", style = MaterialTheme.typography.bodySmall)
                                                             Slider(value = appRingOffsetX.toFloat(), onValueChange = { appRingOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("app_${packageName}_ring_offset_x", appRingOffsetX).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = -150f..150f, steps = 59)
                                                             Text("Camera Y offset: $appRingOffsetY dp", style = MaterialTheme.typography.bodySmall)
-                                                            Slider(value = appRingOffsetY.toFloat(), onValueChange = { appRingOffsetY = it.toInt().coerceIn(0, 160); prefs.edit().putInt("app_${packageName}_ring_offset_y", appRingOffsetY).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 0f..160f, steps = 39)
+                                                            Slider(value = appRingOffsetY.toFloat(), onValueChange = { appRingOffsetY = it.toInt().coerceIn(0, 80); prefs.edit().putInt("app_${packageName}_ring_offset_y", appRingOffsetY).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 0f..80f, steps = 39)
                                                             Text("Ring stroke: $appRingStroke dp", style = MaterialTheme.typography.bodySmall)
                                                             Slider(value = appRingStroke.toFloat(), onValueChange = { appRingStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("app_${packageName}_ring_stroke", appRingStroke).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..10f, steps = 7)
                                                         }
                                                         TextButton(onClick = {
                                                             prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
-                                                            appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 68); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 28); appRingStroke = prefs.getInt("ring_stroke", 5)
+                                                            appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 36); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 0); appRingStroke = prefs.getInt("ring_stroke", 5)
                                                             sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
                                                         }) { Text("Reset app style") }
                                                     }
