@@ -17,6 +17,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -124,21 +125,25 @@ class FloatingIndicatorService : Service() {
                 }
             }
             x = if (isRing) dp(ringOffsetX) else dp(2)
-            y = when (prefs.getString("position", "top")) {
+            y = when (appPosition) {
                 "camera" -> dp(ringOffsetY)
                 "bottom" -> dp(12)
                 else -> dp(2)
             }
         }
-        removeOverlay()
-        val view = IndicatorView(this, isRing).apply {
-            updateFrom(prefs)
+        val current = overlay
+        if (current is IndicatorView && current.ring == isRing) {
+            current.updateFrom(prefs)
+            runCatching { wm.updateViewLayout(current, params) }.onFailure { removeOverlay() }
+            return
         }
+        removeOverlay()
+        val view = IndicatorView(this, isRing).apply { updateFrom(prefs) }
         overlay = view
         runCatching { wm.addView(view, params) }.onFailure { overlay = null }
     }
 
-    private inner class IndicatorView(context: Context, private val ring: Boolean) : View(context) {
+    private inner class IndicatorView(context: Context, val ring: Boolean) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val bounds = RectF()
         private var progress = 0
@@ -185,12 +190,11 @@ class FloatingIndicatorService : Service() {
                 paint.color = Color.argb(opacity * 225 / 255, 240, 238, 246)
                 canvas.drawArc(bounds, 0f, 360f, false, paint)
                 if (signal) {
-                    paint.color = if (media) tertiary else primary
-                    val sweep = when {
-                        indeterminate -> 115f
-                        else -> progress * 3.6f
-                    }
-                    canvas.drawArc(bounds, -90f, sweep, false, paint)
+                    val activeColor = if (media) tertiary else primary
+                    paint.color = Color.argb(opacity, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
+                    val sweep = if (indeterminate) 115f else progress * 3.6f
+                    val startAngle = if (indeterminate) -90f + (SystemClock.uptimeMillis() % 1400L) / 1400f * 360f else -90f
+                    canvas.drawArc(bounds, startAngle, sweep, false, paint)
                 }
                 paint.style = Paint.Style.FILL
                 paint.color = Color.WHITE
@@ -205,17 +209,21 @@ class FloatingIndicatorService : Service() {
                 if (rounded) canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), height / 2f, height / 2f, paint)
                 else canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
                 if (signal) {
-                    paint.color = if (media) tertiary else primary
+                    val activeColor = if (media) tertiary else primary
+                    paint.color = Color.argb(opacity, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
                     if (width < height) {
                         val segment = if (indeterminate) height * 0.35f else height * progress / 100f
-                        if (rounded) canvas.drawRoundRect(0f, height - segment, width.toFloat(), height.toFloat(), width / 2f, width / 2f, paint)
-                        else canvas.drawRect(0f, height - segment, width.toFloat(), height.toFloat(), paint)
+                        val start = if (indeterminate) ((SystemClock.uptimeMillis() % 1400L) / 1400f) * (height - segment) else height - segment
+                        if (rounded) canvas.drawRoundRect(0f, start, width.toFloat(), start + segment, width / 2f, width / 2f, paint)
+                        else canvas.drawRect(0f, start, width.toFloat(), start + segment, paint)
                     } else {
                         val segment = if (indeterminate) width * 0.12f else width * progress / 100f
-                        if (rounded) canvas.drawRoundRect(0f, 0f, segment, height.toFloat(), height / 2f, height / 2f, paint)
-                        else canvas.drawRect(0f, 0f, segment, height.toFloat(), paint)
+                        val start = if (indeterminate) ((SystemClock.uptimeMillis() % 1400L) / 1400f) * (width - segment) else 0f
+                        if (rounded) canvas.drawRoundRect(start, 0f, start + segment, height.toFloat(), height / 2f, height / 2f, paint)
+                        else canvas.drawRect(start, 0f, start + segment, height.toFloat(), paint)
                     }
                 }
+                if (signal && indeterminate) postInvalidateDelayed(32L)
             }
         }
     }
