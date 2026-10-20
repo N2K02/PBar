@@ -79,16 +79,22 @@ class ProgressNotificationListener : NotificationListenerService() {
             prefs.getBoolean("show_for_media", true) &&
                 !isIgnoredPackage(controller.packageName) && when (controller.playbackState?.state) {
                 PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
-                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
+                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING,
+                PlaybackState.STATE_PAUSED -> true
                 else -> false
             }
         }
         // Prefer a session that exposes usable timing data; stale browser/system
         // sessions can otherwise win and leave the indicator apparently stuck.
         val playing = playingCandidates.firstOrNull { controller ->
-            (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
+            controller.playbackState?.state != PlaybackState.STATE_PAUSED &&
+                (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
                 (controller.playbackState?.position ?: -1L) >= 0L
-        } ?: playingCandidates.firstOrNull()
+        } ?: playingCandidates.firstOrNull { it.playbackState?.state != PlaybackState.STATE_PAUSED }
+            ?: playingCandidates.firstOrNull { controller ->
+                (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
+                    (controller.playbackState?.position ?: -1L) >= 0L
+            } ?: playingCandidates.firstOrNull()
         progressHandler.removeCallbacks(progressTicker)
         if (playing != null) {
             val metadata = playing.metadata
@@ -100,6 +106,8 @@ class ProgressNotificationListener : NotificationListenerService() {
             prefs.edit()
                 .putBoolean("has_signal", true)
                 .putBoolean("signal_media", true)
+                .putBoolean("signal_playing", state?.state == PlaybackState.STATE_PLAYING || state?.state == PlaybackState.STATE_FAST_FORWARDING || state?.state == PlaybackState.STATE_REWINDING)
+                .putFloat("signal_speed", state?.playbackSpeed ?: 1f)
                 .putBoolean("signal_timer", false)
                 .putBoolean("signal_download", false)
                 .putBoolean("signal_indeterminate", duration <= 0L)
@@ -115,6 +123,9 @@ class ProgressNotificationListener : NotificationListenerService() {
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             if (state?.state == PlaybackState.STATE_PLAYING) progressHandler.postDelayed(progressTicker, 500L)
         } else {
+            // If a media notification remains after its session stops reporting,
+            // retain the last position but freeze the animation rather than drifting.
+            prefs.edit().putBoolean("signal_playing", false).apply()
             val notificationSignal = activeNotifications.orEmpty().any { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
             if (!notificationSignal) {
                 prefs.edit().putBoolean("has_signal", false).putBoolean("signal_media", false).putBoolean("signal_timer", false).putBoolean("signal_download", false).putInt("signal_progress", 0).apply()

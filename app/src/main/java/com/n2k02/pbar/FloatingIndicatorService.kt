@@ -124,6 +124,11 @@ class FloatingIndicatorService : Service() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val bounds = RectF()
         private var progress = 0
+        private var mediaPositionMs = 0L
+        private var mediaDurationMs = 0L
+        private var mediaPlaying = false
+        private var mediaSpeed = 1f
+        private var mediaAnchorElapsed = 0L
         private var indeterminate = false
         private var media = false
         private var signal = false
@@ -132,6 +137,11 @@ class FloatingIndicatorService : Service() {
 
         fun updateFrom(prefs: android.content.SharedPreferences) {
             progress = prefs.getInt("signal_progress", 0).coerceIn(0, 100)
+            mediaPositionMs = prefs.getLong("signal_position", 0L).coerceAtLeast(0L)
+            mediaDurationMs = prefs.getLong("signal_duration", 0L).coerceAtLeast(0L)
+            mediaPlaying = prefs.getBoolean("signal_playing", false)
+            mediaSpeed = prefs.getFloat("signal_speed", 1f).coerceIn(0.1f, 4f)
+            mediaAnchorElapsed = SystemClock.elapsedRealtime()
             indeterminate = prefs.getBoolean("signal_indeterminate", false)
             media = prefs.getBoolean("signal_media", false)
             signal = prefs.getBoolean("has_signal", false)
@@ -140,8 +150,16 @@ class FloatingIndicatorService : Service() {
             invalidate()
         }
 
+        private fun currentProgress(): Int {
+            if (!media || mediaDurationMs <= 0L) return progress
+            val elapsed = if (mediaPlaying) (SystemClock.elapsedRealtime() - mediaAnchorElapsed).coerceAtLeast(0L) else 0L
+            val estimated = mediaPositionMs + (elapsed * mediaSpeed).toLong()
+            return ((estimated.coerceIn(0L, mediaDurationMs) * 100L) / mediaDurationMs).toInt()
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            val displayProgress = currentProgress()
             val density = resources.displayMetrics.density
             val fallbackColor = if (Build.VERSION.SDK_INT >= 31) {
                 val typed = android.util.TypedValue()
@@ -173,7 +191,7 @@ class FloatingIndicatorService : Service() {
                 if (signal) {
                     val activeColor = appOverride ?: if (media) tertiary else primary
                     paint.color = Color.argb(opacity, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
-                    val sweep = if (indeterminate) 115f else progress * 3.6f
+                    val sweep = if (indeterminate) 115f else displayProgress * 3.6f
                     val startAngle = if (indeterminate) -90f + (SystemClock.uptimeMillis() % 1400L) / 1400f * 360f else -90f
                     canvas.drawArc(bounds, startAngle, sweep, false, paint)
                 }
@@ -182,9 +200,10 @@ class FloatingIndicatorService : Service() {
                 paint.textAlign = Paint.Align.CENTER
                 paint.textSize = 11f * density
                 paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                val label = if (media) "♫" else if (signal && !indeterminate) "$progress%" else "•"
+                val label = if (media) "♫" else if (signal && !indeterminate) "$displayProgress%" else "•"
                 canvas.drawText(label, width / 2f, height / 2f - (paint.ascent() + paint.descent()) / 2f, paint)
                 if (signal && indeterminate) postInvalidateDelayed(32L)
+                else if (signal && media && mediaPlaying && mediaDurationMs > 0L) postInvalidateDelayed(16L)
             } else {
                 paint.style = Paint.Style.FILL
                 paint.color = Color.argb(opacity * 80 / 255, 150, 150, 150)
@@ -194,18 +213,19 @@ class FloatingIndicatorService : Service() {
                     val activeColor = if (media) tertiary else primary
                     paint.color = Color.argb(opacity, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
                     if (width < height) {
-                        val segment = if (indeterminate) height * 0.35f else height * progress / 100f
+                        val segment = if (indeterminate) height * 0.35f else height * displayProgress / 100f
                         val start = if (indeterminate) ((SystemClock.uptimeMillis() % 1400L) / 1400f) * (height - segment) else height - segment
                         if (rounded) canvas.drawRoundRect(0f, start, width.toFloat(), start + segment, width / 2f, width / 2f, paint)
                         else canvas.drawRect(0f, start, width.toFloat(), start + segment, paint)
                     } else {
-                        val segment = if (indeterminate) width * 0.12f else width * progress / 100f
+                        val segment = if (indeterminate) width * 0.12f else width * displayProgress / 100f
                         val start = if (indeterminate) ((SystemClock.uptimeMillis() % 1400L) / 1400f) * (width - segment) else 0f
                         if (rounded) canvas.drawRoundRect(start, 0f, start + segment, height.toFloat(), height / 2f, height / 2f, paint)
                         else canvas.drawRect(start, 0f, start + segment, height.toFloat(), paint)
                     }
                 }
                 if (signal && indeterminate) postInvalidateDelayed(32L)
+                else if (signal && media && mediaPlaying && mediaDurationMs > 0L) postInvalidateDelayed(16L)
             }
         }
     }
