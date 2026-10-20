@@ -14,8 +14,7 @@ class PBarAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        if (!prefs.getBoolean("hide_fullscreen", false) &&
-            !prefs.getBoolean("show_on_lock_screen", false)) return
+        if (!prefs.getBoolean("hide_fullscreen", false)) return
 
         val packageName = event.packageName?.toString().orEmpty()
         if (packageName.isBlank()) return
