@@ -13,7 +13,8 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
-import androidx.compose.ui.platform.ComposeView\nimport androidx.compose.ui.platform.setContent
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.setContent
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -38,7 +39,8 @@ class FloatingIndicatorService : Service() {
     override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL), RECEIVER_NOT_EXPORTED)\n        else @Suppress("DEPRECATION") registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL))
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL), RECEIVER_NOT_EXPORTED)
+        else { @Suppress("DEPRECATION") registerReceiver(refreshReceiver, IntentFilter(ProgressNotificationListener.ACTION_SIGNAL)) }
         if (Settings.canDrawOverlays(this)) render()
     }
 
