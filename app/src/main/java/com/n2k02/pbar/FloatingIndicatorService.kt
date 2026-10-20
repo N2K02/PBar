@@ -29,8 +29,10 @@ class FloatingIndicatorService : Service() {
     private var fullscreen = false
     private val refreshReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED) {
-                fullscreen = intent.getBooleanExtra(PBarAccessibilityService.EXTRA_FULLSCREEN, false)
+            when (intent?.action) {
+                PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED ->
+                    fullscreen = intent.getBooleanExtra(PBarAccessibilityService.EXTRA_FULLSCREEN, false)
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF, Intent.ACTION_USER_PRESENT -> fullscreen = false
             }
             render()
         }
