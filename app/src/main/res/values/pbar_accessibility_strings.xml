@@ -1,0 +1,3 @@
+<resources>
+    <string name="pbar_accessibility_description">Optional PBar helper that checks foreground window bounds to hide the progress indicator in fullscreen mode. It does not read or store on-screen text.</string>
+</resources>

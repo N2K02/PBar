@@ -68,6 +68,19 @@ class MainActivity : ComponentActivity() {
         var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
+        var customColorHex by remember { mutableStateOf(prefs.getString("indicator_custom_color", "#8B5CF6") ?: "#8B5CF6") }
+        var customColorMessage by remember { mutableStateOf("") }
+        var hideFullscreen by remember { mutableStateOf(prefs.getBoolean("hide_fullscreen", false)) }
+        var showOnLockScreen by remember { mutableStateOf(prefs.getBoolean("show_on_lock_screen", false)) }
+        var showForDownloads by remember { mutableStateOf(prefs.getBoolean("show_for_downloads", true)) }
+        var showForMedia by remember { mutableStateOf(prefs.getBoolean("show_for_media", true)) }
+        var showForTimers by remember { mutableStateOf(prefs.getBoolean("show_for_timers", true)) }
+        var ringSize by remember { mutableIntStateOf(prefs.getInt("ring_size", 68).coerceIn(40, 120)) }
+        var ringOffsetX by remember { mutableIntStateOf(prefs.getInt("ring_offset_x", 0).coerceIn(-150, 150)) }
+        var ringOffsetY by remember { mutableIntStateOf(prefs.getInt("ring_offset_y", 28).coerceIn(0, 160)) }
+        var ringStroke by remember { mutableIntStateOf(prefs.getInt("ring_stroke", 5).coerceIn(2, 10)) }
+        var indicatorOpacity by remember { mutableIntStateOf(prefs.getInt("indicator_opacity", 100).coerceIn(20, 100)) }
+        var roundedCorners by remember { mutableStateOf(prefs.getBoolean("rounded_corners", true)) }
         var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
         var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
         var appColorOverrides by remember {
@@ -186,10 +199,28 @@ class MainActivity : ComponentActivity() {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Use app colour", style = MaterialTheme.typography.titleMedium)
-                                            Text("Uses the source notification's colour when available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Uses the source notification's colour when available. A custom colour is used when no source colour is available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         Switch(checked = appColor, onCheckedChange = { appColor = it; prefs.edit().putBoolean("app_color", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
                                     }
+                                    OutlinedTextField(
+                                        value = customColorHex,
+                                        onValueChange = { customColorHex = it; customColorMessage = "" },
+                                        label = { Text("Default colour (hex)") },
+                                        supportingText = { Text(customColorMessage.ifBlank { "Example: #8B5CF6" }) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    OutlinedButton(onClick = {
+                                        val normalized = if (customColorHex.startsWith("#")) customColorHex else "#$customColorHex"
+                                        val valid = runCatching { android.graphics.Color.parseColor(normalized) }.isSuccess
+                                        if (valid) {
+                                            customColorHex = normalized
+                                            prefs.edit().putString("indicator_custom_color", normalized).apply()
+                                            customColorMessage = "Saved"
+                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                        } else customColorMessage = "Enter a valid hex colour, such as #8B5CF6"
+                                    }, modifier = Modifier.fillMaxWidth()) { Text("Apply custom colour") }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
                                     val positionOptions = if (style == "ring") {
                                         listOf("top" to "Top centre", "camera" to "Near camera", "bottom" to "Bottom centre")
@@ -205,6 +236,94 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     Text("“Near camera” is an approximate top-center position; exact placement depends on the device's cutout.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (style == "ring") {
+                                        HorizontalDivider()
+                                        Text("Camera-hole calibration", style = MaterialTheme.typography.titleMedium)
+                                        Text("Ring size: $ringSize dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringSize.toFloat(), onValueChange = { ringSize = it.toInt().coerceIn(40, 120); prefs.edit().putInt("ring_size", ringSize).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 40f..120f, steps = 39)
+                                        Text("Horizontal offset: $ringOffsetX dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringOffsetX.toFloat(), onValueChange = { ringOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("ring_offset_x", ringOffsetX).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = -150f..150f, steps = 59)
+                                        Text("Vertical offset: $ringOffsetY dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringOffsetY.toFloat(), onValueChange = { ringOffsetY = it.toInt().coerceIn(0, 160); prefs.edit().putInt("ring_offset_y", ringOffsetY).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 0f..160f, steps = 39)
+                                        Text("Ring stroke: $ringStroke dp", style = MaterialTheme.typography.bodyMedium)
+                                        Slider(value = ringStroke.toFloat(), onValueChange = { ringStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("ring_stroke", ringStroke).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 2f..10f, steps = 7)
+                                    }
+                                    HorizontalDivider()
+                                    Text("Appearance details", style = MaterialTheme.typography.titleMedium)
+                                    Text("Opacity: $indicatorOpacity%", style = MaterialTheme.typography.bodyMedium)
+                                    Slider(value = indicatorOpacity.toFloat(), onValueChange = { indicatorOpacity = it.toInt().coerceIn(20, 100); prefs.edit().putInt("indicator_opacity", indicatorOpacity).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 20f..100f, steps = 39)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Rounded ends", style = MaterialTheme.typography.titleMedium)
+                                            Text("Use soft rounded edges on the progress line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = roundedCorners, onCheckedChange = { roundedCorners = it; prefs.edit().putBoolean("rounded_corners", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
+                                    }
+                                    HorizontalDivider()
+                                    Text("Tracking", style = MaterialTheme.typography.titleMedium)
+                                    listOf(
+                                        Triple("Downloads and transfers", "Read notification progress when apps expose it.", showForDownloads),
+                                        Triple("Music and media", "Track supported playback sessions.", showForMedia),
+                                        Triple("Google Clock timers", "Track timer progress when Clock exposes it.", showForTimers)
+                                    ).forEach { (label, summary, enabled) ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(label, style = MaterialTheme.typography.titleSmall)
+                                                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            Switch(
+                                                checked = enabled,
+                                                onCheckedChange = { value ->
+                                                    when (label) {
+                                                        "Downloads and transfers" -> {
+                                                            showForDownloads = value
+                                                            prefs.edit().putBoolean("show_for_downloads", value).apply()
+                                                            if (!value && prefs.getBoolean("signal_download", false)) prefs.edit().putBoolean("has_signal", false).apply()
+                                                        }
+                                                        "Music and media" -> {
+                                                            showForMedia = value
+                                                            prefs.edit().putBoolean("show_for_media", value).apply()
+                                                            if (!value && prefs.getBoolean("signal_media", false)) prefs.edit().putBoolean("has_signal", false).apply()
+                                                        }
+                                                        else -> {
+                                                            showForTimers = value
+                                                            prefs.edit().putBoolean("show_for_timers", value).apply()
+                                                            if (!value && prefs.getBoolean("signal_timer", false)) prefs.edit().putBoolean("has_signal", false).putBoolean("signal_timer", false).apply()
+                                                        }
+                                                    }
+                                                    sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                }
+                                            )
+                                        }
+                                    }
+                                    HorizontalDivider()
+                                    Text("Screen behaviour", style = MaterialTheme.typography.titleMedium)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Hide in fullscreen", style = MaterialTheme.typography.titleSmall)
+                                            Text("Hide the indicator in immersive apps and fullscreen video. Requires the optional PBar accessibility helper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = hideFullscreen, onCheckedChange = { value ->
+                                            hideFullscreen = value
+                                            prefs.edit().putBoolean("hide_fullscreen", value).apply()
+                                            if (value) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                        })
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Show on lock screen", style = MaterialTheme.typography.titleSmall)
+                                            Text("Allow the indicator on the lock screen. Android may restrict overlays on some secure lock screens.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = showOnLockScreen, onCheckedChange = { value ->
+                                            showOnLockScreen = value
+                                            prefs.edit().putBoolean("show_on_lock_screen", value).apply()
+                                            if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                        })
+                                    }
+                                    OutlinedButton(onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Open accessibility settings")
+                                    }
                                 }
                             }
                         }
@@ -236,27 +355,132 @@ class MainActivity : ComponentActivity() {
                                         detectedApps.forEach { (packageName, label) ->
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                                 Column(Modifier.weight(1f)) {
+                                                    var advancedExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
+                                                    var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
+                                                    var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
+                                                    var appCustomHex by remember(packageName) { mutableStateOf(appColorOverrides[packageName] ?: "") }
+                                                    var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)) }
+                                                    var appRingSize by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_size", prefs.getInt("ring_size", 68)).coerceIn(40, 120)) }
+                                                    var appRingStroke by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_stroke", prefs.getInt("ring_stroke", 5)).coerceIn(2, 10)) }
+                                                    var appRingOffsetX by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)) }
+                                                    var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 28)).coerceIn(0, 160)) }
                                                     Text(label, style = MaterialTheme.typography.titleMedium)
                                                     Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                        val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: "Automatic"
-                                                        TextButton(onClick = { colorMenuExpanded = true }) { Text(currentColorName) }
+                                                        val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
+                                                        TextButton(onClick = { colorMenuExpanded = true }) { Text("Colour: $currentColorName") }
                                                         DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
                                                             appColorOptions.forEach { (optionName, hex) ->
-                                                                DropdownMenuItem(
-                                                                    text = { Text(optionName) },
-                                                                    onClick = {
-                                                                        val updated = appColorOverrides.toMutableMap()
-                                                                        if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
-                                                                        appColorOverrides = updated
-                                                                        prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
-                                                                        colorMenuExpanded = false
-                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
-                                                                    }
-                                                                )
+                                                                DropdownMenuItem(text = { Text(optionName) }, onClick = {
+                                                                    val updated = appColorOverrides.toMutableMap()
+                                                                    if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
+                                                                    appCustomHex = hex
+                                                                    appColorOverrides = updated
+                                                                    prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
+                                                                    colorMenuExpanded = false
+                                                                    sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                })
                                                             }
                                                         }
+                                                        TextButton(onClick = { advancedExpanded = !advancedExpanded }) { Text(if (advancedExpanded) "Less" else "Customize") }
+                                                    }
+                                                    if (advancedExpanded) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            OutlinedTextField(
+                                                                value = appCustomHex,
+                                                                onValueChange = { appCustomHex = it },
+                                                                label = { Text("Custom hex") },
+                                                                placeholder = { Text("#8B5CF6") },
+                                                                singleLine = true,
+                                                                modifier = Modifier.weight(1f)
+                                                            )
+                                                            TextButton(onClick = {
+                                                                val normalized = if (appCustomHex.startsWith("#")) appCustomHex else "#$appCustomHex"
+                                                                if (runCatching { android.graphics.Color.parseColor(normalized) }.isSuccess) {
+                                                                    val updated = appColorOverrides.toMutableMap()
+                                                                    updated[packageName] = normalized
+                                                                    appColorOverrides = updated
+                                                                    appCustomHex = normalized
+                                                                    prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
+                                                                    sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                }
+                                                            }) { Text("Apply") }
+                                                        }
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text("Style", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { styleMenuExpanded = true }) { Text(when (appStyle) { "line" -> "Line"; "ring" -> "Ring"; else -> "Default" }) }
+                                                            DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
+                                                                listOf("default" to "Default", "line" to "Line", "ring" to "Ring").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appStyle = value
+                                                                        val edit = prefs.edit()
+                                                                        if (value == "default") edit.remove("app_${packageName}_style") else edit.putString("app_${packageName}_style", value)
+                                                                        edit.apply()
+                                                                        styleMenuExpanded = false
+                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                    })
+                                                                }
+                                                            }
+                                                        }
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text("Orientation", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { orientationMenuExpanded = true }) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
+                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }) {
+                                                                listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appOrientation = value
+                                                                        val edit = prefs.edit()
+                                                                        if (value == "default") edit.remove("app_${packageName}_orientation") else edit.putString("app_${packageName}_orientation", value)
+                                                                        edit.apply()
+                                                                        orientationMenuExpanded = false
+                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                    })
+                                                                }
+                                                            }
+                                                        }
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text("Position", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { positionMenuExpanded = true }) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
+                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
+                                                                (if (appStyle == "ring" || (appStyle == "default" && style == "ring") ||
+                                                                    (appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
+                                                                    listOf("default" to "Default", "top" to "Top", "camera" to "Near camera", "bottom" to "Bottom")
+                                                                } else {
+                                                                    listOf("default" to "Default", "left" to "Left", "center" to "Centre", "right" to "Right")
+                                                                }).forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appPosition = value
+                                                                        val edit = prefs.edit()
+                                                                        if (value == "default") edit.remove("app_${packageName}_position") else edit.putString("app_${packageName}_position", value)
+                                                                        edit.apply()
+                                                                        positionMenuExpanded = false
+                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                    })
+                                                                }
+                                                            }
+                                                        }
+                                                        Text("Thickness: $appThickness dp", style = MaterialTheme.typography.bodySmall)
+                                                        Slider(value = appThickness.toFloat(), onValueChange = { appThickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("app_${packageName}_thickness", appThickness).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..12f, steps = 9)
+                                                        if (appStyle == "ring") {
+                                                            Text("Ring size: $appRingSize dp", style = MaterialTheme.typography.bodySmall)
+                                                            Slider(value = appRingSize.toFloat(), onValueChange = { appRingSize = it.toInt().coerceIn(40, 120); prefs.edit().putInt("app_${packageName}_ring_size", appRingSize).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 40f..120f, steps = 39)
+                                                            Text("Camera X offset: $appRingOffsetX dp", style = MaterialTheme.typography.bodySmall)
+                                                            Slider(value = appRingOffsetX.toFloat(), onValueChange = { appRingOffsetX = it.toInt().coerceIn(-150, 150); prefs.edit().putInt("app_${packageName}_ring_offset_x", appRingOffsetX).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = -150f..150f, steps = 59)
+                                                            Text("Camera Y offset: $appRingOffsetY dp", style = MaterialTheme.typography.bodySmall)
+                                                            Slider(value = appRingOffsetY.toFloat(), onValueChange = { appRingOffsetY = it.toInt().coerceIn(0, 160); prefs.edit().putInt("app_${packageName}_ring_offset_y", appRingOffsetY).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 0f..160f, steps = 39)
+                                                            Text("Ring stroke: $appRingStroke dp", style = MaterialTheme.typography.bodySmall)
+                                                            Slider(value = appRingStroke.toFloat(), onValueChange = { appRingStroke = it.toInt().coerceIn(2, 10); prefs.edit().putInt("app_${packageName}_ring_stroke", appRingStroke).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..10f, steps = 7)
+                                                        }
+                                                        TextButton(onClick = {
+                                                            prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
+                                                            appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 68); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 28); appRingStroke = prefs.getInt("ring_stroke", 5)
+                                                            sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                        }) { Text("Reset app style") }
                                                     }
                                                 }
                                                 Switch(
