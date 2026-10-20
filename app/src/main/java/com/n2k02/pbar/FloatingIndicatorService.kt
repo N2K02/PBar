@@ -86,18 +86,20 @@ class FloatingIndicatorService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             android.graphics.PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = when {
-                vertical -> when (prefs.getString("position", "top")) {
-                    "bottom" -> Gravity.RIGHT or Gravity.CENTER_VERTICAL
-                    "camera" -> Gravity.LEFT or Gravity.CENTER_VERTICAL
+            gravity = if (vertical) {
+                when (prefs.getString("position", "left")) {
+                    "right" -> Gravity.RIGHT or Gravity.CENTER_VERTICAL
+                    "center" -> Gravity.CENTER
                     else -> Gravity.LEFT or Gravity.CENTER_VERTICAL
                 }
-                else -> when (prefs.getString("position", "top")) {
+            } else {
+                when (prefs.getString("position", "top")) {
                     "bottom" -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                    "camera" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
                     else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 }
             }
-            x = if (vertical && prefs.getString("position", "top") == "bottom") dp(2) else dp(2)
+            x = dp(2)
             y = when (prefs.getString("position", "top")) {
                 "camera" -> dp(28)
                 "bottom" -> dp(12)
