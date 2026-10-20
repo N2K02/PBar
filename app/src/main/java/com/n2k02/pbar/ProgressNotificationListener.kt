@@ -15,6 +15,25 @@ class ProgressNotificationListener : NotificationListenerService() {
     private lateinit var mediaSessions: MediaSessionManager
     private val registeredControllers = mutableMapOf<MediaController, MediaController.Callback>()
     private val progressHandler = Handler(Looper.getMainLooper())
+    private val timerHandler = Handler(Looper.getMainLooper())
+    private var timerPackage = ""
+    private var timerRemainingAtStart = 0L
+    private var timerTotalMs = 0L
+    private var timerStartElapsed = 0L
+    private val timerTicker = object : Runnable {
+        override fun run() {
+            val elapsed = SystemClock.elapsedRealtime() - timerStartElapsed
+            val remaining = (timerRemainingAtStart - elapsed).coerceAtLeast(0L)
+            val total = timerTotalMs
+            val percent = if (total > 0L) (((total - remaining).coerceIn(0L, total) * 100L) / total).toInt() else 0
+            val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+            if (prefs.getString("signal_package", null) == timerPackage && prefs.getBoolean("signal_timer", false)) {
+                prefs.edit().putInt("signal_progress", percent).putBoolean("signal_indeterminate", false).apply()
+                sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+            }
+            if (remaining > 0L) timerHandler.postDelayed(this, 1000L)
+        }
+    }
     private val progressTicker = object : Runnable {
         override fun run() {
             if (!::mediaSessions.isInitialized) return
@@ -100,6 +119,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         registeredControllers.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
         registeredControllers.clear()
         progressHandler.removeCallbacks(progressTicker)
+        stopTimerTicker()
         if (::mediaSessions.isInitialized) runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
         super.onDestroy()
     }
@@ -132,12 +152,20 @@ class ProgressNotificationListener : NotificationListenerService() {
             extras.containsKey("android.mediaSession") ||
             template.contains("MediaStyle", true)
         val timer = isGoogleTimerNotification(sbn)
+        if (!timer && prefs.getBoolean("signal_timer", false) && prefs.getString("signal_package", null) == sbn.packageName) {
+            stopTimerTicker()
+            prefs.edit().putBoolean("has_signal", false).putBoolean("signal_timer", false).apply()
+            sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+        }
         if (media && !prefs.getBoolean("show_for_media", true)) return
         if (timer && !prefs.getBoolean("show_for_timers", true)) return
         if (!timer && !media && !prefs.getBoolean("show_for_downloads", true)) return
 
         val parsedPercent = parsePercentage(extras)
-        val timerProgress = parseGoogleTimerProgress(sbn)
+        val timerDurations = parseGoogleTimerDurations(sbn)
+        val timerProgress = timerDurations?.let { (remaining, total) ->
+            if (total > 0L) (((total - remaining).coerceIn(0L, total) * 100L) / total).toInt() else null
+        }
         val hasNativeProgress = max > 0
         val hasParsedProgress = parsedPercent != null
         val hasTimerProgress = timerProgress != null
@@ -168,6 +196,25 @@ class ProgressNotificationListener : NotificationListenerService() {
             .putLong("signal_updated", System.currentTimeMillis())
             .apply()
         sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+        if (timer && timerDurations != null) startTimerTicker(sbn.packageName, timerDurations.first, timerDurations.second)
+        else if (timer) stopTimerTicker()
+    }
+
+    private fun startTimerTicker(sourcePackage: String, remainingMs: Long, totalMs: Long) {
+        timerHandler.removeCallbacks(timerTicker)
+        timerPackage = sourcePackage
+        timerRemainingAtStart = remainingMs
+        timerTotalMs = totalMs
+        timerStartElapsed = SystemClock.elapsedRealtime()
+        timerHandler.postDelayed(timerTicker, 1000L)
+    }
+
+    private fun stopTimerTicker() {
+        timerHandler.removeCallbacks(timerTicker)
+        timerPackage = ""
+        timerRemainingAtStart = 0L
+        timerTotalMs = 0L
+        timerStartElapsed = 0L
     }
 
     private fun parsePercentage(extras: android.os.Bundle): Int? {
@@ -188,12 +235,17 @@ class ProgressNotificationListener : NotificationListenerService() {
         return key.contains("RUNNING")
     }
 
-    private fun parseGoogleTimerProgress(sbn: StatusBarNotification): Int? {
+    private fun parseGoogleTimerDurations(sbn: StatusBarNotification): Pair<Long, Long>? {
         if (!isGoogleTimerNotification(sbn)) return null
         val fields = sbn.notification.sortKey.orEmpty().split("|")
         val remaining = fields.firstOrNull { it.contains("⏳") }?.substringAfter("⏳")?.let(::parseClockMillis) ?: return null
         val total = fields.firstOrNull { it.contains("Σ") }?.substringAfter("Σ")?.let(::parseClockMillis) ?: return null
-        if (total <= 0L) return null
+        if (total <= 0L || remaining < 0L) return null
+        return remaining to total
+    }
+
+    private fun parseGoogleTimerProgress(sbn: StatusBarNotification): Int? {
+        val (remaining, total) = parseGoogleTimerDurations(sbn) ?: return null
         return (((total - remaining).coerceIn(0L, total) * 100L) / total).toInt()
     }
 
@@ -209,6 +261,7 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        if (isGoogleTimerNotification(sbn)) stopTimerTicker()
         val remaining = activeNotifications.orEmpty().filter { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (remaining.isEmpty()) {
