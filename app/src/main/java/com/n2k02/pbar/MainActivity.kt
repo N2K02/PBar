@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -166,6 +167,25 @@ class MainActivity : ComponentActivity() {
             diagnosticListenerConnected = prefs.getBoolean("diagnostic_listener_connected", false)
             diagnosticSessionError = prefs.getString("diagnostic_session_error", "").orEmpty()
         }
+        // The button used to only re-read saved values, so a stale reading (e.g. 8%) never cleared.
+        // Now it also asks Android to rebind the listener (a no-op if bound) and makes it re-query
+        // media sessions straight away.
+        fun recheckSignalStatus() {
+            runCatching {
+                android.service.notification.NotificationListenerService.requestRebind(
+                    ComponentName(this@MainActivity, ProgressNotificationListener::class.java)
+                )
+            }
+            sendBroadcast(Intent(ProgressNotificationListener.ACTION_REFRESH).setPackage(this@MainActivity.packageName))
+            refreshSignalStatus()
+        }
+        // Keep the Home status live while it is showing instead of a one-time snapshot.
+        LaunchedEffect(tab) {
+            while (tab == Tab.HOME) {
+                refreshSignalStatus()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
 
         val dark = isSystemInDarkTheme()
         val scheme = when {
@@ -269,7 +289,7 @@ class MainActivity : ComponentActivity() {
                                     if (signalUpdated > 0L) {
                                         Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Button(onClick = { refreshSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                    Button(onClick = { recheckSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Refresh status")
                                     }
                                 }
@@ -452,6 +472,11 @@ class MainActivity : ComponentActivity() {
                                         }.sortedBy { it.second.lowercase() }
                                         detectedApps.forEach { (packageName, label) ->
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                val appIcon = remember(packageName) { loadAppIcon(packageManager, packageName) }
+                                                if (appIcon != null) {
+                                                    Image(bitmap = appIcon, contentDescription = null, modifier = Modifier.size(44.dp))
+                                                    Spacer(Modifier.width(12.dp))
+                                                }
                                                 Column(Modifier.weight(1f)) {
                                                     var advancedExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
@@ -467,7 +492,6 @@ class MainActivity : ComponentActivity() {
                                                     var appRingOffsetX by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)) }
                                                     var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)) }
                                                     Text(label, style = MaterialTheme.typography.titleMedium)
-                                                    Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"

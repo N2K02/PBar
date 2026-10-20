@@ -1,11 +1,16 @@
 package com.n2k02.pbar
 
 import android.app.Notification
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -38,11 +43,21 @@ class ProgressNotificationListener : NotificationListenerService() {
             if (remaining > 0L) timerHandler.postDelayed(this, 1000L)
         }
     }
+    // Errors are kept so the Home screen can show why Android reported no sessions,
+    // instead of silently treating a failed query as "no sessions".
+    private var sessionQueryError = ""
+    private var sessionSetupError = ""
+    private var refreshReceiverRegistered = false
+    private val refreshReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            // Sent by the "Refresh status" button: re-query sessions now so stale values clear.
+            if (::mediaSessions.isInitialized) refreshMediaSessions(currentMediaControllers())
+        }
+    }
     private val progressTicker = object : Runnable {
         override fun run() {
             if (!::mediaSessions.isInitialized) return
-            val controllers = runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList())
-            refreshMediaSessions(controllers)
+            refreshMediaSessions(currentMediaControllers())
         }
     }
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
@@ -53,23 +68,52 @@ class ProgressNotificationListener : NotificationListenerService() {
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("diagnostic_listener_connected", true)
             .putLong("diagnostic_listener_connected_at", System.currentTimeMillis()).apply()
+        seedDefaultIgnoredPackages(prefs)
         // Start the overlay first so it still works if media-session setup below fails.
         overlayController = (overlayController ?: OverlayController(this)).also { it.start() }
-        mediaSessions =getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
+        mediaSessions = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
+        if (!refreshReceiverRegistered) {
+            val filter = IntentFilter(ACTION_REFRESH)
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(refreshReceiver, filter)
+            refreshReceiverRegistered = true
+        }
+        sessionSetupError = ""
         runCatching {
             mediaSessions.addOnActiveSessionsChangedListener(sessionsChanged, ComponentName(this, ProgressNotificationListener::class.java))
-            activeNotifications?.forEach(::consume)
-            refreshMediaSessions(currentMediaControllers())
         }.onFailure { error ->
-            prefs.edit().putString("diagnostic_session_error", error.javaClass.simpleName + ": " + (error.message ?: "no details")).apply()
+            sessionSetupError = "listener setup: " + error.javaClass.simpleName + ": " + (error.message ?: "no details")
         }
+        runCatching {
+            activeNotifications?.forEach(::consume)
+        }
+        // Always run a first query, even if registering the change listener failed above.
+        refreshMediaSessions(currentMediaControllers())
+    }
+
+    /**
+     * System UI posts battery/charging notifications whose text contains a percentage ("8%").
+     * Those were read as a download and left a bar stuck on screen, so they are ignored by
+     * default. This runs once; the apps stay in the Apps list so they can be turned back on.
+     */
+    private fun seedDefaultIgnoredPackages(prefs: android.content.SharedPreferences) {
+        if (prefs.getBoolean("default_ignored_v1", false)) return
+        val ignored = prefs.getStringSet("ignored_packages", emptySet()).orEmpty().toMutableSet()
+        ignored.addAll(DEFAULT_IGNORED_PACKAGES)
+        prefs.edit().putStringSet("ignored_packages", ignored).putBoolean("default_ignored_v1", true).apply()
+    }
+
+    private fun queryActiveSessions(): List<MediaController> {
+        if (!::mediaSessions.isInitialized) return emptyList()
+        return runCatching {
+            mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
+        }.onSuccess { sessionQueryError = "" }
+            .onFailure { sessionQueryError = "session query: " + it.javaClass.simpleName + ": " + (it.message ?: "no details") }
+            .getOrDefault(emptyList())
     }
 
     private fun currentMediaControllers(): List<MediaController> {
-        val active = if (::mediaSessions.isInitialized) runCatching {
-            mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
-        }.getOrDefault(emptyList()) else emptyList()
-        return (active + notificationControllers.values).distinctBy { it.sessionToken }
+        return (queryActiveSessions() + notificationControllers.values).distinctBy { it.sessionToken }
     }
 
     @Suppress("DEPRECATION")
@@ -110,7 +154,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         prefs.edit()
             .putInt("diagnostic_session_count", controllers.size)
             .putString("diagnostic_session_summary", sessionSummary)
-            .putString("diagnostic_session_error", "")
+            .putString("diagnostic_session_error", listOf(sessionSetupError, sessionQueryError).filter { it.isNotBlank() }.joinToString(" | "))
             .putLong("diagnostic_last_session_check", System.currentTimeMillis())
             .apply()
         // Only active playback should create a media progress overlay. A paused
@@ -194,7 +238,15 @@ class ProgressNotificationListener : NotificationListenerService() {
         }
     }
 
+    private fun unregisterRefreshReceiver() {
+        if (refreshReceiverRegistered) {
+            runCatching { unregisterReceiver(refreshReceiver) }
+            refreshReceiverRegistered = false
+        }
+    }
+
     override fun onListenerDisconnected() {
+        unregisterRefreshReceiver()
         overlayController?.stop()
         getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("diagnostic_listener_connected", false).apply()
         // Ask Android to reconnect so the overlay comes back without reopening PBar.
@@ -203,6 +255,7 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        unregisterRefreshReceiver()
         overlayController?.stop()
         overlayController = null
         registeredControllers.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
@@ -251,10 +304,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         if (media) {
             if (!prefs.getBoolean("show_for_media", true)) return
             if (::mediaSessions.isInitialized) {
-                val controllers = runCatching {
-                    mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
-                }.getOrDefault(emptyList())
-                refreshMediaSessions(controllers)
+                refreshMediaSessions(currentMediaControllers())
             }
             // A media-style notification alone is not proof of playback. Only the
             // active MediaSession path may show a media bar; otherwise clear a stale
@@ -454,5 +504,10 @@ class ProgressNotificationListener : NotificationListenerService() {
             (timer && prefs.getBoolean("show_for_timers", true))
     }
 
-    companion object { const val ACTION_SIGNAL = "com.n2k02.pbar.SIGNAL_UPDATED" }
+    companion object {
+        const val ACTION_SIGNAL = "com.n2k02.pbar.SIGNAL_UPDATED"
+        private val DEFAULT_IGNORED_PACKAGES = setOf("com.android.systemui", "android")
+        /** Asks the listener to re-query media sessions now (sent by "Refresh status"). */
+        const val ACTION_REFRESH = "com.n2k02.pbar.REFRESH_SESSIONS"
+    }
 }
