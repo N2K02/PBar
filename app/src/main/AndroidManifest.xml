@@ -34,7 +34,7 @@
         </service>
         <service
             android:name=".PBarAccessibilityService"
-            android:label="PBar fullscreen and lock-screen helper"
+            android:label="PBar fullscreen detection helper"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>
