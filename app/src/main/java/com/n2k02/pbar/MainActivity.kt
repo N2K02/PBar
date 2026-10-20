@@ -1,12 +1,15 @@
 package com.n2k02.pbar
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -37,10 +41,11 @@ class MainActivity : ComponentActivity() {
         setContent { PBarApp() }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     @Composable
     private fun PBarApp() {
         val context = LocalContext.current
+        val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
         var overlayEnabled by remember { mutableStateOf(prefs.getBoolean("overlay_enabled", false)) }
@@ -76,35 +81,42 @@ class MainActivity : ComponentActivity() {
                         Tab.HOME -> {
                             Text("Your progress, at a glance", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                             Text("PBar can show progress from apps that publish it in notifications, plus a small indicator for media notifications.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("Floating indicator", style = MaterialTheme.typography.titleLarge)
-                                    Text(if (overlayEnabled) "Enabled — the indicator can appear over other apps." else "Off — turn it on to show the indicator outside PBar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Button(
-                                        onClick = {
-                                            if (!Settings.canDrawOverlays(this@MainActivity)) {
-                                                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-                                            } else {
-                                                overlayEnabled = !overlayEnabled
-                                                prefs.edit().putBoolean("overlay_enabled", overlayEnabled).apply()
-                                                if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
-                                                else stopService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) { Text(if (!Settings.canDrawOverlays(this@MainActivity)) "Grant overlay permission" else if (overlayEnabled) "Turn indicator off" else "Turn indicator on") }
-                                    OutlinedButton(
-                                        onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) { Text("Set up notification access") }
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                maxItemsInEachRow = if (landscape) 2 else 1
+                            ) {
+                                ElevatedCard(Modifier.fillMaxWidth(if (landscape) 0.48f else 1f)) {
+                                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Text("Floating indicator", style = MaterialTheme.typography.titleLarge)
+                                        Text(if (overlayEnabled) "Enabled — the indicator can appear over other apps." else "Off — turn it on to show the indicator outside PBar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Button(
+                                            onClick = {
+                                                if (!Settings.canDrawOverlays(this@MainActivity)) {
+                                                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                                                } else {
+                                                    overlayEnabled = !overlayEnabled
+                                                    prefs.edit().putBoolean("overlay_enabled", overlayEnabled).apply()
+                                                    if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                                    else stopService(Intent(this@MainActivity, FloatingIndicatorService::class.java))
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text(if (!Settings.canDrawOverlays(this@MainActivity)) "Grant overlay permission" else if (overlayEnabled) "Turn indicator off" else "Turn indicator on") }
+                                        OutlinedButton(
+                                            onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("Set up notification access") }
+                                    }
                                 }
-                            }
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("What PBar can detect", style = MaterialTheme.typography.titleMedium)
-                                    Text("• Download or transfer progress when the source notification exposes progress.")
-                                    Text("• Media notifications, shown as a music indicator.")
-                                    Text("Some apps do not publish exact progress. PBar cannot show data that Android or the source app does not provide.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                ElevatedCard(Modifier.fillMaxWidth(if (landscape) 0.48f else 1f)) {
+                                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("What PBar can detect", style = MaterialTheme.typography.titleMedium)
+                                        Text("• Download or transfer progress when the source notification exposes progress.")
+                                        Text("• Media notifications, shown as a music indicator.")
+                                        Text("Some apps do not publish exact progress. PBar cannot show data that Android or the source app does not provide.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             }
                         }
