@@ -147,8 +147,14 @@ class FloatingIndicatorService : Service() {
                 val typed = android.util.TypedValue()
                 if (getContext().theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data else Color.rgb(103, 80, 164)
             } else Color.rgb(103, 80, 164)
-            val appColorEnabled = getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("app_color", true)
-            val primary = if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor else fallbackColor
+            val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+            val appColorEnabled = prefs.getBoolean("app_color", true)
+            val sourcePackage = prefs.getString("signal_package", "").orEmpty()
+            val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
+                .firstOrNull { it.startsWith("$sourcePackage=") }
+                ?.substringAfter("=")
+                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+            val primary = appOverride ?: if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor else fallbackColor
             val tertiary = Color.rgb(0, 150, 136)
             if (ring) {
                 val stroke = 4.5f * density
