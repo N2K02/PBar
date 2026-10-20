@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
         setContent { PBarApp() }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun PBarApp() {
         val context = LocalContext.current
