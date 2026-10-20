@@ -447,7 +447,12 @@ class MainActivity : ComponentActivity() {
                                                             Text("Position", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { positionMenuExpanded = true }) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
                                                             DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
-                                                                listOf("default" to "Default", "top" to "Top", "camera" to "Near camera", "bottom" to "Bottom", "left" to "Left", "center" to "Centre", "right" to "Right").forEach { (value, label) ->
+                                                                (if (appStyle == "ring" || (appStyle == "default" && style == "ring") ||
+                                                                    (appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
+                                                                    listOf("default" to "Default", "top" to "Top", "camera" to "Near camera", "bottom" to "Bottom")
+                                                                } else {
+                                                                    listOf("default" to "Default", "left" to "Left", "center" to "Centre", "right" to "Right")
+                                                                }).forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appPosition = value
                                                                         val edit = prefs.edit()
