@@ -1,12 +1,84 @@
 package com.n2k02.pbar
 
 import android.app.Notification
+import android.content.ComponentName
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 class ProgressNotificationListener : NotificationListenerService() {
+    private lateinit var mediaSessions: MediaSessionManager
+    private val registeredControllers = mutableMapOf<MediaController, MediaController.Callback>()
+    private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+        refreshMediaSessions(controllers.orEmpty())
+    }
+
     override fun onListenerConnected() {
         activeNotifications?.forEach(::consume)
+        mediaSessions = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
+        runCatching {
+            mediaSessions.addOnActiveSessionsChangedListener(sessionsChanged, ComponentName(this, ProgressNotificationListener::class.java))
+            refreshMediaSessions(mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java)))
+        }
+    }
+
+    private fun refreshMediaSessions(controllers: List<MediaController>) {
+        val active = controllers.toSet()
+        registeredControllers.keys.filter { it !in active }.forEach { controller ->
+            registeredControllers.remove(controller)?.let { callback -> runCatching { controller.unregisterCallback(callback) } }
+        }
+        controllers.forEach { controller ->
+            if (!registeredControllers.containsKey(controller)) {
+                val callback = object : MediaController.Callback() {
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        refreshMediaSessions(runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList()))
+                    }
+                    override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {
+                        refreshMediaSessions(runCatching { mediaSessions.getActiveSessions(ComponentName(this@ProgressNotificationListener, ProgressNotificationListener::class.java)) }.getOrDefault(emptyList()))
+                    }
+                }
+                registeredControllers[controller] = callback
+                runCatching { controller.registerCallback(callback) }
+            }
+        }
+        val playing = controllers.firstOrNull { controller ->
+            when (controller.playbackState?.state) {
+                PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
+                PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
+                else -> false
+            }
+        }
+        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        if (playing != null) {
+            val metadata = playing.metadata
+            prefs.edit()
+                .putBoolean("has_signal", true)
+                .putBoolean("signal_media", true)
+                .putBoolean("signal_indeterminate", true)
+                .putInt("signal_progress", 0)
+                .putInt("signal_color", 0)
+                .putString("signal_package", playing.packageName)
+                .putString("signal_title", metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE) ?: playing.packageName)
+                .putString("signal_text", metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
+                .putLong("signal_updated", System.currentTimeMillis())
+                .apply()
+            sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+        } else {
+            val notificationSignal = activeNotifications.orEmpty().any(::isIndicatorNotification)
+            if (!notificationSignal) {
+                prefs.edit().putBoolean("has_signal", false).putBoolean("signal_media", false).putInt("signal_progress", 0).apply()
+                sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        registeredControllers.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
+        registeredControllers.clear()
+        if (::mediaSessions.isInitialized) runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
+        super.onDestroy()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) = consume(sbn)
