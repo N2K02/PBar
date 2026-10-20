@@ -64,6 +64,9 @@ class MainActivity : ComponentActivity() {
         var overlayEnabled by remember { mutableStateOf(prefs.getBoolean("overlay_enabled", false)) }
         var style by remember { mutableStateOf(prefs.getString("style", "line") ?: "line") }
         var position by remember { mutableStateOf(prefs.getString("position", "top") ?: "top") }
+        var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
+        var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
+        var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
         var latestVersion by remember { mutableStateOf<String?>(null) }
         var apkUrl by remember { mutableStateOf<String?>(null) }
         var releaseUrl by remember { mutableStateOf("https://github.com/N2K02/PBar/releases/latest") }
@@ -152,6 +155,20 @@ class MainActivity : ComponentActivity() {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         FilterChip(selected = style == "line", onClick = { style = "line"; prefs.edit().putString("style", style).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Progress line") })
                                         FilterChip(selected = style == "ring", onClick = { style = "ring"; prefs.edit().putString("style", style).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Ring") })
+                                    }
+                                    Text("Orientation", style = MaterialTheme.typography.titleMedium)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; prefs.edit().putString("orientation", orientation).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Horizontal") })
+                                        FilterChip(selected = orientation == "vertical", onClick = { orientation = "vertical"; prefs.edit().putString("orientation", orientation).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, label = { Text("Vertical") })
+                                    }
+                                    Text("Thickness: $thickness dp", style = MaterialTheme.typography.titleMedium)
+                                    Slider(value = thickness.toFloat(), onValueChange = { thickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("thickness", thickness).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) }, valueRange = 2f..12f, steps = 9)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Use app colour", style = MaterialTheme.typography.titleMedium)
+                                            Text("Uses the source notification's colour when available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = appColor, onCheckedChange = { appColor = it; prefs.edit().putBoolean("app_color", it).apply(); if (overlayEnabled) startService(Intent(this@MainActivity, FloatingIndicatorService::class.java)) })
                                     }
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
                                     listOf("top" to "Top edge", "camera" to "Near camera", "bottom" to "Bottom edge").forEach { (value, label) ->
