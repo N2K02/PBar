@@ -28,3 +28,8 @@ Open the project in Android Studio or run Gradle from the project root. GitHub A
 ## Permissions and privacy
 
 PBar needs notification access to read notification content and progress, and overlay permission to draw its indicator over other apps. Notification data is processed on-device for the indicator. The updater contacts the public GitHub Releases API for this repository.
+
+
+## Release signing
+
+Release APKs use the encrypted signing material in `signing/keys.tar.enc.b64`. Add the matching `SIGNING_PASSPHRASE` repository secret under **Settings → Secrets and variables → Actions** before running the release workflow. The private key is decrypted only in the temporary GitHub Actions runner during signing.
