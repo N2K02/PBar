@@ -142,6 +142,10 @@ class MainActivity : ComponentActivity() {
         var signalDuration by remember { mutableStateOf(prefs.getLong("signal_duration", 0L)) }
         var signalPosition by remember { mutableStateOf(prefs.getLong("signal_position", 0L)) }
         var signalUpdated by remember { mutableStateOf(prefs.getLong("signal_updated", 0L)) }
+        var diagnosticSessionCount by remember { mutableIntStateOf(prefs.getInt("diagnostic_session_count", 0)) }
+        var diagnosticSessionSummary by remember { mutableStateOf(prefs.getString("diagnostic_session_summary", "Waiting for media-session check").orEmpty()) }
+        var diagnosticListenerConnected by remember { mutableStateOf(prefs.getBoolean("diagnostic_listener_connected", false)) }
+        var diagnosticSessionError by remember { mutableStateOf(prefs.getString("diagnostic_session_error", "").orEmpty()) }
         fun refreshSignalStatus() {
             signalHas = prefs.getBoolean("has_signal", false)
             signalPackage = prefs.getString("signal_package", "").orEmpty()
@@ -152,6 +156,10 @@ class MainActivity : ComponentActivity() {
             signalDuration = prefs.getLong("signal_duration", 0L)
             signalPosition = prefs.getLong("signal_position", 0L)
             signalUpdated = prefs.getLong("signal_updated", 0L)
+            diagnosticSessionCount = prefs.getInt("diagnostic_session_count", 0)
+            diagnosticSessionSummary = prefs.getString("diagnostic_session_summary", "Waiting for media-session check").orEmpty()
+            diagnosticListenerConnected = prefs.getBoolean("diagnostic_listener_connected", false)
+            diagnosticSessionError = prefs.getString("diagnostic_session_error", "").orEmpty()
         }
 
         val dark = isSystemInDarkTheme()
@@ -244,6 +252,14 @@ class MainActivity : ComponentActivity() {
                                     }
                                     if (signalMedia && signalDuration > 0L) {
                                         Text("Position: " + (signalPosition / 1000L) + "s / " + (signalDuration / 1000L) + "s", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    HorizontalDivider()
+                                    Text("Media-session diagnostics", style = MaterialTheme.typography.titleMedium)
+                                    Text("Listener: " + if (diagnosticListenerConnected) "connected" else "not currently connected", style = MaterialTheme.typography.bodySmall)
+                                    Text("Active sessions reported by Android: " + diagnosticSessionCount, style = MaterialTheme.typography.bodySmall)
+                                    Text(diagnosticSessionSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (diagnosticSessionError.isNotBlank()) {
+                                        Text("Session error: " + diagnosticSessionError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                                     }
                                     if (signalUpdated > 0L) {
                                         Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
