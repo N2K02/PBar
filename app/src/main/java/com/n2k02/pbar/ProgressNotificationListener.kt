@@ -201,28 +201,20 @@ class ProgressNotificationListener : NotificationListenerService() {
                 }.getOrDefault(emptyList())
                 refreshMediaSessions(controllers)
             }
-            // Some radio/media apps publish a MediaStyle notification but no usable
-            // active MediaSession. Still show a moving, indeterminate bar for them.
+            // A media-style notification alone is not proof of playback. Only the
+            // active MediaSession path may show a media bar; otherwise clear a stale
+            // signal for this app and wait for an actual playing session.
             val current = getSharedPreferences("pbar", MODE_PRIVATE)
-            if (!current.getBoolean("has_signal", false) ||
-                !current.getBoolean("signal_media", false) ||
-                current.getString("signal_package", null) != sbn.packageName) {
+            if (current.getString("signal_package", null) == sbn.packageName &&
+                current.getBoolean("signal_media", false) &&
+                !current.getBoolean("signal_playing", false)) {
                 current.edit()
-                    .putBoolean("has_signal", true)
-                    .putBoolean("signal_media", true)
-                    .putBoolean("signal_playing", true)
-                    .putFloat("signal_speed", 1f)
-                    .putBoolean("signal_timer", false)
-                    .putBoolean("signal_download", false)
-                    .putBoolean("signal_indeterminate", true)
+                    .putBoolean("has_signal", false)
+                    .putBoolean("signal_media", false)
+                    .putBoolean("signal_indeterminate", false)
                     .putInt("signal_progress", 0)
                     .putLong("signal_duration", 0L)
                     .putLong("signal_position", 0L)
-                    .putInt("signal_color", n.color)
-                    .putString("signal_package", sbn.packageName)
-                    .putString("signal_title", title.ifBlank { sbn.packageName })
-                    .putString("signal_text", text)
-                    .putLong("signal_updated", System.currentTimeMillis())
                     .apply()
                 sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             }
