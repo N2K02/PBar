@@ -74,16 +74,22 @@ class ProgressNotificationListener : NotificationListenerService() {
             }
         }
         controllers.forEach { rememberSourcePackage(it.packageName) }
-        val playing = controllers.firstOrNull { controller ->
-            getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("show_for_media", true) &&
+        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        val playingCandidates = controllers.filter { controller ->
+            prefs.getBoolean("show_for_media", true) &&
                 !isIgnoredPackage(controller.packageName) && when (controller.playbackState?.state) {
                 PlaybackState.STATE_PLAYING, PlaybackState.STATE_BUFFERING,
                 PlaybackState.STATE_FAST_FORWARDING, PlaybackState.STATE_REWINDING -> true
                 else -> false
             }
         }
+        // Prefer a session that exposes usable timing data; stale browser/system
+        // sessions can otherwise win and leave the indicator apparently stuck.
+        val playing = playingCandidates.firstOrNull { controller ->
+            (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
+                (controller.playbackState?.position ?: -1L) >= 0L
+        } ?: playingCandidates.firstOrNull()
         progressHandler.removeCallbacks(progressTicker)
-        val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (playing != null) {
             val metadata = playing.metadata
             val state = playing.playbackState
@@ -153,6 +159,17 @@ class ProgressNotificationListener : NotificationListenerService() {
         val media = category == Notification.CATEGORY_TRANSPORT ||
             extras.containsKey("android.mediaSession") ||
             template.contains("MediaStyle", true)
+        // Media notification refreshes often carry no playback position. Let the
+        // MediaSession path own the progress value instead of resetting it to 0.
+        if (media) {
+            if (::mediaSessions.isInitialized) {
+                val controllers = runCatching {
+                    mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
+                }.getOrDefault(emptyList())
+                refreshMediaSessions(controllers)
+            }
+            return
+        }
         val timer = isGoogleTimerNotification(sbn)
         if (!timer && prefs.getBoolean("signal_timer", false) && prefs.getString("signal_package", null) == sbn.packageName) {
             stopTimerTicker()
