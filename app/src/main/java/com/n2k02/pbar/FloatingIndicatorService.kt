@@ -137,7 +137,7 @@ class FloatingIndicatorService : Service() {
             val density = resources.displayMetrics.density
             val fallbackColor = if (Build.VERSION.SDK_INT >= 31) {
                 val typed = android.util.TypedValue()
-                if (theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data else Color.rgb(103, 80, 164)
+                if (getContext().theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data else Color.rgb(103, 80, 164)
             } else Color.rgb(103, 80, 164)
             val appColorEnabled = getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("app_color", true)
             val primary = if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor else fallbackColor
