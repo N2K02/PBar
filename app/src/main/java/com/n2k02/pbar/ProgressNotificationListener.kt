@@ -23,8 +23,10 @@ class ProgressNotificationListener : NotificationListenerService() {
         val category = n.category.orEmpty()
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val template = extras.getString("android.template").orEmpty()
         val isMedia = category == Notification.CATEGORY_TRANSPORT ||
-            n.extras.containsKey("android.mediaSession") ||
+            extras.containsKey("android.mediaSession") ||
+            template.contains("MediaStyle", true) ||
             title.contains("playing", true) || text.contains("playing", true)
         val hasProgress = indeterminate || max > 0
         if (!hasProgress && !isMedia) return
@@ -35,6 +37,8 @@ class ProgressNotificationListener : NotificationListenerService() {
             .putBoolean("signal_media", isMedia && !hasProgress)
             .putBoolean("signal_indeterminate", indeterminate)
             .putInt("signal_progress", if (max > 0) ((progress.toFloat() / max) * 100).toInt().coerceIn(0, 100) else 0)
+            .putInt("signal_color", n.color)
+            .putString("signal_package", sbn.packageName)
             .putString("signal_title", title.ifBlank { sbn.packageName })
             .putString("signal_text", text)
             .putLong("signal_updated", System.currentTimeMillis())
@@ -60,8 +64,10 @@ class ProgressNotificationListener : NotificationListenerService() {
             extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val template = extras.getString("android.template").orEmpty()
         val media = notification.category == Notification.CATEGORY_TRANSPORT ||
             extras.containsKey("android.mediaSession") ||
+            template.contains("MediaStyle", true) ||
             title.contains("playing", true) || text.contains("playing", true)
         return hasProgress || media
     }
