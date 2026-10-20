@@ -9,7 +9,7 @@ PBar is an Android app for showing lightweight floating progress indicators over
 - Detects media notifications and shows a playback indicator when the source exposes that state.
 - Adjustable overlay style and placement.
 - Material 3 Expressive interface with Home, Appearance, and Updates sections.
-- In-app update page for checking the latest GitHub release.
+- In-app update page to check GitHub Releases, download an APK with progress, and open Android's installer.
 - Layout adapts to portrait and landscape.
 - Respects Android navigation-bar and display cutout insets.
 
@@ -23,8 +23,13 @@ PBar only displays information that Android and source apps expose through notif
 
 ## Build
 
-Open the project in Android Studio or run Gradle from the project root. GitHub Actions builds and publishes APK releases from the main branch.
+Open the project in Android Studio or build with Gradle 9.6.0. GitHub Actions builds and publishes signed APK releases from the main branch.
 
 ## Permissions and privacy
 
-PBar needs notification access to read notification content and progress, and overlay permission to draw its indicator over other apps. Notification data is processed on-device for the indicator. The updater contacts the public GitHub Releases API for this repository.
+PBar needs notification access to read notification content and progress, and overlay permission to draw its indicator over other apps. Notification data is processed on-device for the indicator. The updater contacts the public GitHub Releases API and downloads the selected APK; Android verifies its package signature during installation.
+
+
+## Release signing
+
+Release APKs use the encrypted signing material in `signing/keys.tar.enc.b64`. Add the matching `SIGNING_PASSPHRASE` repository secret under **Settings → Secrets and variables → Actions** before running the release workflow. The private key is decrypted only in the temporary GitHub Actions runner during signing.
