@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.graphics.Rect
 import android.os.Build
-import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 
 /**
@@ -19,7 +18,11 @@ class PBarAccessibilityService : AccessibilityService() {
             !prefs.getBoolean("show_on_lock_screen", false)) return
 
         val packageName = event.packageName?.toString().orEmpty()
-        if (packageName.isBlank() || packageName == this.packageName) return
+        if (packageName.isBlank()) return
+        if (packageName == this.packageName) {
+            sendBroadcast(Intent(ACTION_FULLSCREEN_CHANGED).setPackage(this.packageName).putExtra(EXTRA_FULLSCREEN, false))
+            return
+        }
 
         val bounds = Rect()
         val root = rootInActiveWindow
