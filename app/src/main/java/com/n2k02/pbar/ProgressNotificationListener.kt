@@ -319,11 +319,27 @@ class ProgressNotificationListener : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (isGoogleTimerNotification(sbn)) stopTimerTicker()
+
+        // Notification lifetimes and MediaSession lifetimes are not identical. Some
+        // players replace/remove their media notification while playback continues.
+        // Re-query sessions before clearing the overlay signal so a live session wins.
+        if (::mediaSessions.isInitialized) {
+            val controllers = runCatching {
+                mediaSessions.getActiveSessions(ComponentName(this, ProgressNotificationListener::class.java))
+            }.getOrDefault(emptyList())
+            refreshMediaSessions(controllers)
+        }
+
         val remaining = activeNotifications.orEmpty().filter { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (remaining.isEmpty()) {
-            prefs.edit().putBoolean("has_signal", false).putInt("signal_progress", 0).putBoolean("signal_media", false).putBoolean("signal_timer", false).putBoolean("signal_download", false).apply()
-            sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+            // refreshMediaSessions already clears stale media sessions. If it left a
+            // media signal, that signal is still backed by an active session; retain it.
+            val activeMediaSignal = prefs.getBoolean("has_signal", false) && prefs.getBoolean("signal_media", false)
+            if (!activeMediaSignal) {
+                prefs.edit().putBoolean("has_signal", false).putInt("signal_progress", 0).putBoolean("signal_media", false).putBoolean("signal_timer", false).putBoolean("signal_download", false).apply()
+                sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+            }
         } else {
             remaining.forEach(::consume)
         }

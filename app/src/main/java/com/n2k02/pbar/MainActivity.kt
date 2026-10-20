@@ -142,6 +142,27 @@ class MainActivity : ComponentActivity() {
         var downloadProgress by remember { mutableStateOf(0) }
         var downloadedUri by remember { mutableStateOf<Uri?>(null) }
 
+        var signalHas by remember { mutableStateOf(prefs.getBoolean("has_signal", false)) }
+        var signalPackage by remember { mutableStateOf(prefs.getString("signal_package", "").orEmpty()) }
+        var signalMedia by remember { mutableStateOf(prefs.getBoolean("signal_media", false)) }
+        var signalPlaying by remember { mutableStateOf(prefs.getBoolean("signal_playing", false)) }
+        var signalIndeterminate by remember { mutableStateOf(prefs.getBoolean("signal_indeterminate", false)) }
+        var signalProgress by remember { mutableIntStateOf(prefs.getInt("signal_progress", 0)) }
+        var signalDuration by remember { mutableStateOf(prefs.getLong("signal_duration", 0L)) }
+        var signalPosition by remember { mutableStateOf(prefs.getLong("signal_position", 0L)) }
+        var signalUpdated by remember { mutableStateOf(prefs.getLong("signal_updated", 0L)) }
+        fun refreshSignalStatus() {
+            signalHas = prefs.getBoolean("has_signal", false)
+            signalPackage = prefs.getString("signal_package", "").orEmpty()
+            signalMedia = prefs.getBoolean("signal_media", false)
+            signalPlaying = prefs.getBoolean("signal_playing", false)
+            signalIndeterminate = prefs.getBoolean("signal_indeterminate", false)
+            signalProgress = prefs.getInt("signal_progress", 0)
+            signalDuration = prefs.getLong("signal_duration", 0L)
+            signalPosition = prefs.getLong("signal_position", 0L)
+            signalUpdated = prefs.getLong("signal_updated", 0L)
+        }
+
         val dark = isSystemInDarkTheme()
         val scheme = when {
             Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(context)
@@ -211,6 +232,34 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     Text("PBar uses a regular background service without a permanent PBar notification. Android may still stop it under battery or memory pressure.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Live tracking status", style = MaterialTheme.typography.titleLarge)
+                                    Text(
+                                        when {
+                                            !signalHas -> "No progress signal is currently saved. Check notification access and whether the source app exposes an active media session or progress notification."
+                                            signalMedia && signalIndeterminate -> "Media detected — timing data is unavailable, so PBar should show a moving indeterminate segment."
+                                            signalMedia && signalDuration > 0L -> "Media detected — " + (if (signalPlaying) "playing" else "paused") + " at " + signalProgress + "%."
+                                            signalMedia -> "Media detected — playback timing is not available."
+                                            signalIndeterminate -> "An indeterminate progress signal is active."
+                                            else -> "Progress signal active: " + signalProgress + "%."
+                                        },
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (signalPackage.isNotBlank()) {
+                                        Text("Source: " + signalPackage, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (signalMedia && signalDuration > 0L) {
+                                        Text("Position: " + (signalPosition / 1000L) + "s / " + (signalDuration / 1000L) + "s", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (signalUpdated > 0L) {
+                                        Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    OutlinedButton(onClick = { refreshSignalStatus() }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("Refresh status")
+                                    }
                                 }
                             }
                             ElevatedCard(Modifier.fillMaxWidth()) {
