@@ -123,6 +123,9 @@ class ProgressNotificationListener : NotificationListenerService() {
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
             if (state?.state == PlaybackState.STATE_PLAYING) progressHandler.postDelayed(progressTicker, 500L)
         } else {
+            // If a media notification remains after its session stops reporting,
+            // retain the last position but freeze the animation rather than drifting.
+            prefs.edit().putBoolean("signal_playing", false).apply()
             val notificationSignal = activeNotifications.orEmpty().any { !isIgnoredPackage(it.packageName) && isIndicatorNotification(it) }
             if (!notificationSignal) {
                 prefs.edit().putBoolean("has_signal", false).putBoolean("signal_media", false).putBoolean("signal_timer", false).putBoolean("signal_download", false).putInt("signal_progress", 0).apply()
