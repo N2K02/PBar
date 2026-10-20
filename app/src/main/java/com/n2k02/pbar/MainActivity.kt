@@ -167,6 +167,25 @@ class MainActivity : ComponentActivity() {
             diagnosticListenerConnected = prefs.getBoolean("diagnostic_listener_connected", false)
             diagnosticSessionError = prefs.getString("diagnostic_session_error", "").orEmpty()
         }
+        // The button used to only re-read saved values, so a stale reading (e.g. 8%) never cleared.
+        // Now it also asks Android to rebind the listener (a no-op if bound) and makes it re-query
+        // media sessions straight away.
+        fun recheckSignalStatus() {
+            runCatching {
+                android.service.notification.NotificationListenerService.requestRebind(
+                    ComponentName(this@MainActivity, ProgressNotificationListener::class.java)
+                )
+            }
+            sendBroadcast(Intent(ProgressNotificationListener.ACTION_REFRESH).setPackage(this@MainActivity.packageName))
+            refreshSignalStatus()
+        }
+        // Keep the Home status live while it is showing instead of a one-time snapshot.
+        LaunchedEffect(tab) {
+            while (tab == Tab.HOME) {
+                refreshSignalStatus()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
 
         val dark = isSystemInDarkTheme()
         val scheme = when {
@@ -270,7 +289,7 @@ class MainActivity : ComponentActivity() {
                                     if (signalUpdated > 0L) {
                                         Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Button(onClick = { refreshSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                    Button(onClick = { recheckSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Refresh status")
                                     }
                                 }
