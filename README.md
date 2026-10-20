@@ -4,17 +4,16 @@ PBar is an Android progress overlay inspired by the idea of a quick-glance statu
 
 ## Features
 
-- Progress line or circular ring overlay.
+- Progress-bar line overlay only; circular ring mode has been removed.
 - Horizontal or vertical line placement, edge positioning, adjustable thickness, rounded ends, and opacity.
-- Adjustable ring size, stroke, and camera-hole X/Y calibration.
 - Automatic source notification colour, a custom global hex colour, and preset or custom hex colours per app.
-- Per-app customisation for indicator shape, orientation, position, thickness, and ring calibration.
+- Per-app customisation for orientation, position, thickness, and colour.
 - Per-app allow/ignore controls.
 - Download/transfer, media, and Google Clock timer tracking switches.
 - Media-session playback position estimation where Android exposes duration and position.
 - Fullscreen auto-hide using an optional accessibility helper.
 - Optional lock-screen display, subject to Android/device restrictions.
-- Material 3 Expressive interface with Home, Appearance, Apps, and Updates sections.
+- Material 3 Expressive interface with Home, Appearance, Apps, and Updates sections, plus a Quit button that stops the overlay until PBar is opened again.
 - In-app GitHub Releases updater.
 - Portrait and landscape layouts; respects display cutouts and navigation insets.
 
@@ -26,7 +25,7 @@ PBar is an Android progress overlay inspired by the idea of a quick-glance statu
 - No persistent PBar foreground-service notification; the overlay uses a regular started service, like NetSpeed.
 - Accessibility permission is optional and used for fullscreen window-boundary detection. PBar does not read or store on-screen text.
 
-PBar can only show exact progress when Android or the source app exposes suitable progress, timer, or media-session metadata. If a source exposes no usable duration/position, PBar uses an animated indeterminate indicator instead.
+PBar uses Android's active MediaSession data for playback progress and notification progress for downloads and timers. It can only show exact media progress when the source exposes usable duration and position metadata; otherwise it uses an animated indeterminate indicator. Media bars respect the configured app colour or the default/custom colour.
 
 The floating overlay runs without a persistent foreground-service notification to keep the notification drawer clear. Android may stop regular background services under memory or battery pressure; if the overlay stops, reopen PBar or exempt it from battery optimisation in system settings. This is a deliberate trade-off compared with a foreground service.
 
