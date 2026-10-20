@@ -328,23 +328,94 @@ class MainActivity : ComponentActivity() {
                                                     Text(packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                        var advancedExpanded by remember(packageName) { mutableStateOf(false) }
+                                                        var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                        var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                        var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                        var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
+                                                        var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
+                                                        var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
+                                                        var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", 4).coerceIn(2, 12)) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: "Automatic"
-                                                        TextButton(onClick = { colorMenuExpanded = true }) { Text(currentColorName) }
+                                                        TextButton(onClick = { colorMenuExpanded = true }) { Text("Colour: $currentColorName") }
                                                         DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
                                                             appColorOptions.forEach { (optionName, hex) ->
-                                                                DropdownMenuItem(
-                                                                    text = { Text(optionName) },
-                                                                    onClick = {
-                                                                        val updated = appColorOverrides.toMutableMap()
-                                                                        if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
-                                                                        appColorOverrides = updated
-                                                                        prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
-                                                                        colorMenuExpanded = false
-                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
-                                                                    }
-                                                                )
+                                                                DropdownMenuItem(text = { Text(optionName) }, onClick = {
+                                                                    val updated = appColorOverrides.toMutableMap()
+                                                                    if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
+                                                                    appColorOverrides = updated
+                                                                    prefs.edit().putStringSet("app_color_overrides", updated.map { (pkg, color) -> "$pkg=$color" }.toSet()).apply()
+                                                                    colorMenuExpanded = false
+                                                                    sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                })
                                                             }
                                                         }
+                                                        TextButton(onClick = { advancedExpanded = !advancedExpanded }) { Text(if (advancedExpanded) "Less" else "Customize") }
+                                                    }
+                                                    var advancedExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
+                                                    var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
+                                                    var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
+                                                    var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", 4).coerceIn(2, 12)) }
+                                                    if (advancedExpanded) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text("Style", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { styleMenuExpanded = true }) { Text(when (appStyle) { "line" -> "Line"; "ring" -> "Ring"; else -> "Default" }) }
+                                                            DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
+                                                                listOf("default" to "Default", "line" to "Line", "ring" to "Ring").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appStyle = value
+                                                                        val edit = prefs.edit()
+                                                                        if (value == "default") edit.remove("app_${packageName}_style") else edit.putString("app_${packageName}_style", value)
+                                                                        edit.apply()
+                                                                        styleMenuExpanded = false
+                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                    })
+                                                                }
+                                                            }
+                                                        }
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text("Orientation", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { orientationMenuExpanded = true }) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
+                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }) {
+                                                                listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appOrientation = value
+                                                                        val edit = prefs.edit()
+                                                                        if (value == "default") edit.remove("app_${packageName}_orientation") else edit.putString("app_${packageName}_orientation", value)
+                                                                        edit.apply()
+                                                                        orientationMenuExpanded = false
+                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                    })
+                                                                }
+                                                            }
+                                                        }
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text("Position", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { positionMenuExpanded = true }) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
+                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
+                                                                listOf("default" to "Default", "top" to "Top", "camera" to "Near camera", "bottom" to "Bottom", "left" to "Left", "center" to "Centre", "right" to "Right").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appPosition = value
+                                                                        val edit = prefs.edit()
+                                                                        if (value == "default") edit.remove("app_${packageName}_position") else edit.putString("app_${packageName}_position", value)
+                                                                        edit.apply()
+                                                                        positionMenuExpanded = false
+                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                    })
+                                                                }
+                                                            }
+                                                        }
+                                                        Text("Thickness: $appThickness dp", style = MaterialTheme.typography.bodySmall)
+                                                        Slider(value = appThickness.toFloat(), onValueChange = { appThickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("app_${packageName}_thickness", appThickness).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..12f, steps = 9)
+                                                        TextButton(onClick = {
+                                                            prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_thickness").apply()
+                                                            appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = 4
+                                                            sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                        }) { Text("Reset app style") }
                                                     }
                                                 }
                                                 Switch(
