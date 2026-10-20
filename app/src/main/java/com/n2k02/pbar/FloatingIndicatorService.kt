@@ -69,7 +69,7 @@ class FloatingIndicatorService : Service() {
             return
         }
         val sourcePackage = prefs.getString("signal_package", "").orEmpty()
-        val isRing = prefs.getString("app_${sourcePackage}_style", prefs.getString("style", "line")) == "ring"
+        val isRing = false // PBar now uses a progress bar only; ring mode is retired.
         val vertical = !isRing && prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
         val ringSize = prefs.getInt("app_${sourcePackage}_ring_size", prefs.getInt("ring_size", 36)).coerceIn(24, 80)
@@ -77,8 +77,8 @@ class FloatingIndicatorService : Service() {
         val ringOffsetY = prefs.getInt("app_${sourcePackage}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)
         val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
         val params = WindowManager.LayoutParams(
-            when { isRing -> dp(ringSize); vertical -> dp(thickness); else -> WindowManager.LayoutParams.MATCH_PARENT },
-            when { isRing -> dp(ringSize); vertical -> WindowManager.LayoutParams.MATCH_PARENT; else -> dp(thickness) },
+            when { vertical -> dp(thickness); else -> WindowManager.LayoutParams.MATCH_PARENT },
+            when { vertical -> WindowManager.LayoutParams.MATCH_PARENT; else -> dp(thickness) },
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -99,13 +99,12 @@ class FloatingIndicatorService : Service() {
                     else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 }
             }
-            x = if (isRing) dp(ringOffsetX) else dp(2)
+            x = 0
             y = when (appPosition) {
-                "camera" -> dp(ringOffsetY)
                 "bottom" -> dp(12)
-                // TYPE_APPLICATION_OVERLAY is layered below Android's status bar.
-                // Place the top-edge line immediately below the system inset.
-                else -> if (appPosition == "top") statusBarHeight() else dp(2)
+                // A regular app overlay cannot draw above the status-bar window.
+                // Keep the bar in the visible app area immediately below that inset.
+                else -> statusBarHeight()
             }
         }
         val current = overlay
