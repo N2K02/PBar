@@ -7,7 +7,7 @@ PBar is an Android app for showing lightweight floating progress indicators over
 - Floating progress line or ring overlay.
 - Reads progress exposed by ongoing notifications from other apps.
 - Detects media notifications and shows a playback indicator when the source exposes that state.
-- Adjustable overlay style and placement.
+- Manual horizontal or vertical line orientation, edge/centre placement, adjustable 2–12 dp thickness, and source-notification colour when available.
 - Material 3 Expressive interface with Home, Appearance, and Updates sections.
 - In-app update page to check GitHub Releases, download an APK with progress, and open Android's installer.
 - Layout adapts to portrait and landscape.
