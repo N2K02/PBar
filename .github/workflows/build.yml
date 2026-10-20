@@ -1,0 +1,87 @@
+name: Build PBar APK
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, e.g. 1.0. Leave empty to choose the next version.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pbar-release
+  cancel-in-progress: false
+
+env:
+  APP: PBar
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Determine version and release notes
+        env:
+          REQUESTED: ${{ github.event.inputs.version }}
+        run: |
+          last=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]$' | sort -V | tail -1 || true)
+          if [ -n "$REQUESTED" ]; then
+            echo "$REQUESTED" | grep -Eq '^[0-9]+\.[0-9]$' || { echo "::error::Version must look like 1.0"; exit 1; }
+            ver="$REQUESTED"
+          elif [ -z "$last" ]; then
+            ver="1.0"
+          else
+            t=${last#v}
+            n=$(( ${t%.*} * 10 + ${t#*.} + 1 ))
+            ver="$(( n / 10 )).$(( n % 10 ))"
+          fi
+          if git rev-parse -q --verify "refs/tags/v$ver" >/dev/null; then
+            echo "::error::Release v$ver already exists"; exit 1
+          fi
+          echo "VERSION=$ver" >> "$GITHUB_ENV"
+          prev="$last"
+          if [ -n "$prev" ]; then range="$prev..HEAD"; else range="HEAD"; fi
+          changes=$(git log --no-merges --pretty='- %s' "$range" | head -40)
+          [ -n "$changes" ] || changes="- Initial release and maintenance"
+          {
+            echo "## PBar $ver"
+            echo
+            echo "### What's new"
+            echo "$changes"
+            echo
+            echo "### Install"
+            echo "Download the APK below and install it on your Android device."
+            echo
+            echo "_Built from ${GITHUB_SHA::7}_"
+          } > release-notes.md
+      - name: Build release APK
+        run: |
+          gradle --no-daemon assembleRelease -PappVersion="$VERSION"
+          cp app/build/outputs/apk/release/app-release-unsigned.apk PBar-$VERSION-unsigned.apk
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: PBar ${{ env.VERSION }}
+          body_path: release-notes.md
+          files: PBar-${{ env.VERSION }}-unsigned.apk
+          make_latest: true
