@@ -99,9 +99,9 @@ class FloatingIndicatorService : Service() {
         val isRing = prefs.getString("app_${sourcePackage}_style", prefs.getString("style", "line")) == "ring"
         val vertical = !isRing && prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
-        val ringSize = prefs.getInt("app_${sourcePackage}_ring_size", prefs.getInt("ring_size", 68)).coerceIn(40, 120)
+        val ringSize = prefs.getInt("app_${sourcePackage}_ring_size", prefs.getInt("ring_size", 36)).coerceIn(24, 80)
         val ringOffsetX = prefs.getInt("app_${sourcePackage}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)
-        val ringOffsetY = prefs.getInt("app_${sourcePackage}_ring_offset_y", prefs.getInt("ring_offset_y", 28)).coerceIn(0, 160)
+        val ringOffsetY = prefs.getInt("app_${sourcePackage}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)
         val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
         val params = WindowManager.LayoutParams(
             when { isRing -> dp(ringSize); vertical -> dp(thickness); else -> WindowManager.LayoutParams.MATCH_PARENT },
@@ -130,7 +130,9 @@ class FloatingIndicatorService : Service() {
             y = when (appPosition) {
                 "camera" -> dp(ringOffsetY)
                 "bottom" -> dp(12)
-                else -> dp(2)
+                // TYPE_APPLICATION_OVERLAY is layered below Android's status bar.
+                // Place the top-edge line immediately below the system inset.
+                else -> if (appPosition == "top") statusBarHeight() else dp(2)
             }
         }
         val current = overlay
@@ -238,6 +240,11 @@ class FloatingIndicatorService : Service() {
     private fun removeOverlay() {
         overlay?.let { runCatching { wm.removeView(it) } }
         overlay = null
+    }
+
+    private fun statusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else dp(24)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
