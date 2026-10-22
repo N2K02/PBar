@@ -714,30 +714,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         Tab.UPDATES -> {
-                            val updateState by AppUpdater.state.collectAsState()
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                            ) {
-                                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("Installed version", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("PBar v${AppUpdater.installedVersionName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        "Check GitHub for the latest release, review what's new, and install updates.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Button(
-                                        onClick = { AppUpdater.check(manual = true) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        enabled = updateState !is AppUpdater.State.Checking && updateState !is AppUpdater.State.Downloading,
-                                        shapes = ButtonDefaults.shapes(),
-                                    ) {
-                                        Text(if (updateState is AppUpdater.State.Checking) "Checking for updates…" else "Check for updates")
-                                    }
-                                }
-                            }
-                            UpdateCard()
+                            UpdatesPage()
                         }
                     }
                     Spacer(Modifier.height(8.dp))
