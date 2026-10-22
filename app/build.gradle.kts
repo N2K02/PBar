@@ -15,8 +15,8 @@ android {
         applicationId = "com.n2k02.pbar"
         minSdk = 26
         targetSdk = 35
-        versionCode = versionCodeValue
-        versionName = appVersion
+        versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: versionCodeValue
+        versionName = appVersion + ((findProperty("appVersionSuffix") as String?) ?: "")
     }
 
     buildTypes {
