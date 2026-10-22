@@ -2,6 +2,7 @@ package com.n2k02.pbar
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Tune
@@ -113,6 +115,10 @@ class MainActivity : ComponentActivity() {
         var indicatorOpacity by remember { mutableIntStateOf(prefs.getInt("indicator_opacity", 100).coerceIn(20, 100)) }
         var roundedCorners by remember { mutableStateOf(prefs.getBoolean("rounded_corners", true)) }
         var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
+        var appsSearch by remember { mutableStateOf("") }
+        var appsFilter by remember { mutableStateOf("All") }
+        var selectedApp by remember { mutableStateOf<String?>(null) }
+        var installedAppsRevision by remember { mutableIntStateOf(0) }
         var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
         var appColorOverrides by remember {
             mutableStateOf(
@@ -453,13 +459,14 @@ class MainActivity : ComponentActivity() {
                         }
                         Tab.APPS -> {
                             Text("Choose which apps PBar tracks", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("PBar remembers apps that have published a progress or media notification. Turn tracking off for unwanted sources, or choose a colour for each app. Settings stay on your device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Select which installed apps can show progress. Tap an app to customize its appearance.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Button(onClick = {
                                             knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
                                             ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
+                                            installedAppsRevision++
                                             appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap()
                                         }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Refresh list") }
                                         Button(onClick = {
@@ -467,24 +474,50 @@ class MainActivity : ComponentActivity() {
                                             prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
                                         }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Track all") }
                                     }
-                                    if (knownPackages.isEmpty()) {
-                                        Text("No source apps detected yet. Enable notification access, then play media or start a download and return here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    val installedApps = remember(installedAppsRevision, knownPackages) {
+                                        @Suppress("DEPRECATION")
+                                        val installed = packageManager.getInstalledApplications(0)
+                                            .filter { it.packageName != packageName && (it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || packageManager.getLaunchIntentForPackage(it.packageName) != null) }
+                                            .map { it.packageName }
+                                        (installed + knownPackages).distinct().map { pkg ->
+                                            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+                                            pkg to label
+                                        }.sortedWith(compareBy<Pair<String, String>> { it.first !in knownPackages }.thenBy { it.second.lowercase() })
+                                    }
+                                    val visibleApps = installedApps.filter { (pkg, label) ->
+                                        (appsSearch.isBlank() || label.contains(appsSearch, ignoreCase = true) || pkg.contains(appsSearch, ignoreCase = true)) &&
+                                            (appsFilter == "All" || (appsFilter == "Enabled" && pkg !in ignoredPackages) || (appsFilter == "Disabled" && pkg in ignoredPackages))
+                                    }
+                                    Text("${installedApps.count { it.first !in ignoredPackages }} enabled · ${installedApps.size} apps", style = MaterialTheme.typography.titleMedium)
+                                    OutlinedTextField(value = appsSearch, onValueChange = { appsSearch = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("All", "Enabled", "Disabled").forEach { option ->
+                                            FilterChip(selected = appsFilter == option, onClick = { appsFilter = option }, label = { Text(option) })
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(onClick = {
+                                            ignoredPackages = emptySet()
+                                            prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
+                                            refreshOverlay()
+                                        }, modifier = Modifier.weight(1f)) { Text("Enable all") }
+                                        OutlinedButton(onClick = {
+                                            ignoredPackages = installedApps.map { it.first }.toSet()
+                                            prefs.edit().putStringSet("ignored_packages", ignoredPackages).putBoolean("has_signal", false).apply()
+                                            refreshOverlay()
+                                        }, modifier = Modifier.weight(1f)) { Text("Disable all") }
+                                    }
+                                    if (visibleApps.isEmpty()) {
+                                        Text(if (installedApps.isEmpty()) "No apps found. Check app visibility and refresh." else "No apps match your search or filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     } else {
-                                        val detectedApps = knownPackages.map { packageName ->
-                                            val label = runCatching {
-                                                packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
-                                            }.getOrDefault(packageName)
-                                            packageName to label
-                                        }.sortedBy { it.second.lowercase() }
-                                        detectedApps.forEach { (packageName, label) ->
-                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        visibleApps.forEach { (packageName, label) ->                       Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                                 val appIcon = remember(packageName) { loadAppIcon(packageManager, packageName) }
                                                 if (appIcon != null) {
                                                     Image(bitmap = appIcon, contentDescription = null, modifier = Modifier.size(44.dp))
                                                     Spacer(Modifier.width(12.dp))
                                                 }
                                                 Column(Modifier.weight(1f)) {
-                                                    var advancedExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    val advancedExpanded = selectedApp == packageName
                                                     var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
@@ -497,7 +530,8 @@ class MainActivity : ComponentActivity() {
                                                     var appRingStroke by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_stroke", prefs.getInt("ring_stroke", 5)).coerceIn(2, 10)) }
                                                     var appRingOffsetX by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)) }
                                                     var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)) }
-                                                    Text(label, style = MaterialTheme.typography.titleMedium)
+                                                    Text(label, modifier = Modifier.clickable { selectedApp = if (advancedExpanded) null else packageName }, style = MaterialTheme.typography.titleMedium)
+                                                    Text(if (packageName in knownPackages) "Detected progress source" else "Installed app", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
@@ -515,7 +549,7 @@ class MainActivity : ComponentActivity() {
                                                                 })
                                                             }
                                                         }
-                                                        TextButton(onClick = { advancedExpanded = !advancedExpanded }, shapes = ButtonDefaults.shapes()) { Text(if (advancedExpanded) "Less" else "Customize") }
+                                                        TextButton(onClick = { selectedApp = if (advancedExpanded) null else packageName }, shapes = ButtonDefaults.shapes()) { Text(if (advancedExpanded) "Less" else "Customize") }
                                                     }
                                                     if (advancedExpanded) {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -612,9 +646,10 @@ class MainActivity : ComponentActivity() {
                                                             sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
                                                         }
                                                     }
+                                                        refreshOverlay()
                                                 )
                                             }
-                                            if (packageName != detectedApps.last().first) HorizontalDivider()
+                                            if (packageName != visibleApps.last().first) HorizontalDivider()
                                         }
                                     }
                                 }
