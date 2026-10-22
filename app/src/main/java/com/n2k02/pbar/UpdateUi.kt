@@ -251,7 +251,7 @@ fun UpdatesPage(modifier: Modifier = Modifier) {
     val state by AppUpdater.state.collectAsState()
     val experimentalEnabled by AppUpdater.experimentalEnabled.collectAsState()
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
