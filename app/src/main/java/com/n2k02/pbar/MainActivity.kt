@@ -460,6 +460,16 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         Tab.APPS -> {
+                                    val installedApps = remember(installedAppsRevision, knownPackages) {
+                                        @Suppress("DEPRECATION")
+                                        val installed = packageManager.getInstalledApplications(0)
+                                            .filter { it.packageName != packageName && (it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || packageManager.getLaunchIntentForPackage(it.packageName) != null) }
+                                            .map { it.packageName }
+                                        (installed + knownPackages).distinct().map { pkg ->
+                                            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+                                            pkg to label
+                                        }.sortedWith(compareBy<Pair<String, String>> { it.first !in knownPackages }.thenBy { it.second.lowercase() })
+                                    }
                             if (selectedApp == null) {
                             Text("Your apps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                             Text("Select which installed apps can show progress. Tap an app to customize its appearance.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -472,16 +482,6 @@ class MainActivity : ComponentActivity() {
                                             appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap()
                                         }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Refresh list") }
 
-                                    }
-                                    val installedApps = remember(installedAppsRevision, knownPackages) {
-                                        @Suppress("DEPRECATION")
-                                        val installed = packageManager.getInstalledApplications(0)
-                                            .filter { it.packageName != packageName && (it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || packageManager.getLaunchIntentForPackage(it.packageName) != null) }
-                                            .map { it.packageName }
-                                        (installed + knownPackages).distinct().map { pkg ->
-                                            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
-                                            pkg to label
-                                        }.sortedWith(compareBy<Pair<String, String>> { it.first !in knownPackages }.thenBy { it.second.lowercase() })
                                     }
                                     val visibleApps = installedApps.filter { (pkg, label) ->
                                         (appsSearch.isBlank() || label.contains(appsSearch, ignoreCase = true) || pkg.contains(appsSearch, ignoreCase = true)) &&
@@ -530,10 +530,10 @@ class MainActivity : ComponentActivity() {
                                         Text("No apps match your filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     } else {
                                         visibleApps.forEach { (packageName, label) ->
-                                            ElevatedCard(Modifier.fillMaxWidth(), onClick = {
+                                            ElevatedCard(onClick = {
                                                 if (multiSelectApps) selectedPackages = if (packageName in selectedPackages) selectedPackages - packageName else selectedPackages + packageName
                                                 else selectedApp = packageName
-                                            }) {
+                                            }, modifier = Modifier.fillMaxWidth()) {
                                                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                                     if (multiSelectApps) Checkbox(checked = packageName in selectedPackages, onCheckedChange = { checked -> selectedPackages = if (checked) selectedPackages + packageName else selectedPackages - packageName })
                                                     val iconBitmap = remember(packageName) { loadAppIcon(packageManager, packageName) }
@@ -553,8 +553,6 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
-                            }
-
                             } else {
                                 TextButton(onClick = { selectedApp = null }) { Text("‹ Back to apps") }
                                 Text("Customize app", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
