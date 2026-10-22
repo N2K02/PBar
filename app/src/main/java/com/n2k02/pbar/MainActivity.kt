@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -141,6 +142,9 @@ class MainActivity : ComponentActivity() {
         var multiSelectApps by remember { mutableStateOf(false) }
         var selectedPackages by remember { mutableStateOf(setOf<String>()) }
         var selectedApp by remember { mutableStateOf<String?>(null) }
+        BackHandler(enabled = selectedApp != null || tab != Tab.HOME) {
+            if (selectedApp != null) selectedApp = null else tab = Tab.HOME
+        }
         var installedAppsRevision by remember { mutableIntStateOf(0) }
         var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
         var appColorOverrides by remember {
@@ -230,15 +234,15 @@ class MainActivity : ComponentActivity() {
                 contentWindowInsets = WindowInsets.safeDrawing,
                 topBar = {
                     TopAppBar(
-                        title = { Column { Text("PBar", fontWeight = FontWeight.Bold); Text(tab.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+                        title = { Column { Text(if (selectedApp != null) "Customize app" else "PBar", fontWeight = FontWeight.Bold); Text(if (selectedApp != null) "Apps / Appearance" else tab.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                     )
                 },
                 bottomBar = {
                     NavigationBar {
-                        NavigationBarItem(selected = tab == Tab.HOME, onClick = { tab = Tab.HOME }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
-                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { tab = Tab.STYLE }, icon = { Icon(Icons.Default.Palette, null) }, label = { Text("Appearance") })
-                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Default.Tune, null) }, label = { Text("Apps") })
-                        NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { tab = Tab.UPDATES }, icon = { Icon(Icons.Default.SystemUpdate, null) }, label = { Text("Updates") })
+                        NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
+                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Default.Palette, null) }, label = { Text("Appearance") })
+                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Default.Tune, null) }, label = { Text("Apps") })
+                        NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { selectedApp = null; tab = Tab.UPDATES }, icon = { Icon(Icons.Default.SystemUpdate, null) }, label = { Text("Updates") })
                     }
                 }
             ) { padding ->
@@ -576,8 +580,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             } else {
                                 TextButton(onClick = { selectedApp = null }) { Text("‹ Back to apps") }
-                                Text("Customize app", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                                Text("Changes save automatically. Default values follow your global appearance settings.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Changes save automatically. Default values follow your global appearance settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         installedApps.filter { it.first == selectedApp }.forEach { (packageName, label) ->
                                             ElevatedCard(Modifier.fillMaxWidth()) {
