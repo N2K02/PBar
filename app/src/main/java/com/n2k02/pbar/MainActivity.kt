@@ -460,6 +460,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         Tab.APPS -> {
+                            if (selectedApp == null) {
                             Text("Your apps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                             Text("Select which installed apps can show progress. Tap an app to customize its appearance.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -526,9 +527,40 @@ class MainActivity : ComponentActivity() {
                                         }, modifier = Modifier.weight(1f)) { Text("Disable all") }
                                     }
                                     if (visibleApps.isEmpty()) {
-                                        Text(if (installedApps.isEmpty()) "No apps found. Check app visibility and refresh." else "No apps match your search or filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("No apps match your filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     } else {
                                         visibleApps.forEach { (packageName, label) ->
+                                            ElevatedCard(Modifier.fillMaxWidth(), onClick = {
+                                                if (multiSelectApps) selectedPackages = if (packageName in selectedPackages) selectedPackages - packageName else selectedPackages + packageName
+                                                else selectedApp = packageName
+                                            }) {
+                                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                    if (multiSelectApps) Checkbox(checked = packageName in selectedPackages, onCheckedChange = { checked -> selectedPackages = if (checked) selectedPackages + packageName else selectedPackages - packageName })
+                                                    val iconBitmap = remember(packageName) { loadAppIcon(packageManager, packageName) }
+                                                    if (iconBitmap != null) Image(bitmap = iconBitmap, contentDescription = null, modifier = Modifier.size(44.dp))
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                                        Text(if (packageName in knownPackages) "Detected · " + if (packageName in ignoredPackages) "Disabled" else "Enabled" else if (packageName in ignoredPackages) "Disabled" else "Enabled", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                    if (!multiSelectApps) Switch(checked = packageName !in ignoredPackages, onCheckedChange = { enabled ->
+                                                        ignoredPackages = if (enabled) ignoredPackages - packageName else ignoredPackages + packageName
+                                                        prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
+                                                        if (!enabled && prefs.getString("signal_package", null) == packageName) prefs.edit().putBoolean("has_signal", false).apply()
+                                                        refreshOverlay()
+                                                    })
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            } else {
+                                TextButton(onClick = { selectedApp = null }) { Text("‹ Back to apps") }
+                                Text("Customize app", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                Text("Changes save automatically. Default values follow your global appearance settings.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        installedApps.filter { it.first == selectedApp }.forEach { (packageName, label) ->
                                             ElevatedCard(Modifier.fillMaxWidth()) {
                                             Column(Modifier.padding(14.dp)) {
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -543,7 +575,7 @@ class MainActivity : ComponentActivity() {
                                                     Spacer(Modifier.width(12.dp))
                                                 }
                                                 Column(Modifier.weight(1f)) {
-                                                    val advancedExpanded = selectedApp == packageName
+                                                    val advancedExpanded = true
                                                     var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
@@ -556,10 +588,10 @@ class MainActivity : ComponentActivity() {
                                                     var appRingStroke by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_stroke", prefs.getInt("ring_stroke", 5)).coerceIn(2, 10)) }
                                                     var appRingOffsetX by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_x", prefs.getInt("ring_offset_x", 0)).coerceIn(-150, 150)) }
                                                     var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)) }
-                                                    Text(label, modifier = Modifier.clickable { selectedApp = if (advancedExpanded) null else packageName }, style = MaterialTheme.typography.titleMedium)
+                                                    Text(label, style = MaterialTheme.typography.titleLarge)
                                                     Text(if (packageName in knownPackages) "Detected progress source" else "Installed app", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    if (!multiSelectApps) TextButton(onClick = { selectedApp = if (advancedExpanded) null else packageName }) { Text(if (advancedExpanded) "Hide settings" else "Customize appearance") }
-                                                    if (advancedExpanded && !multiSelectApps) Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    
+                                                    if (advancedExpanded) Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
                                                         TextButton(onClick = { colorMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text("Colour: $currentColorName") }
@@ -679,10 +711,9 @@ class MainActivity : ComponentActivity() {
                                             }
                                             }
                                         }
-                                    }
+
                                 }
                             }
-
                         }
                         Tab.UPDATES -> {
                             val updateState by AppUpdater.state.collectAsState()
