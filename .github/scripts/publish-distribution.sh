@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# CI rebuild requested after ANDROID_DISTRIBUTION_TOKEN configuration (2026-10-22).
 set -euo pipefail
 : "${GH_TOKEN:?MRADIO_DISTRIBUTION_TOKEN secret must be configured}"
 : "${APP:?APP required}"
