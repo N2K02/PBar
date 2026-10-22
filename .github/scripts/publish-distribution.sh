@@ -24,10 +24,22 @@ fi
 SHA=$(sha256sum "$APK" | cut -d' ' -f1)
 SIZE=$(stat -c %s "$APK")
 if gh release view "$TAG" --repo "$TARGET" >/dev/null 2>&1; then
-  echo "::error::Release tag already exists; refusing to overwrite a signed binary"
-  exit 1
+  # A prior attempt may have uploaded the immutable APK before failing to publish its manifest.
+  # Resume only if the published APK is byte-for-byte identical.
+  TMP_DIR=$(mktemp -d)
+  trap 'rm -rf "$TMP_DIR"' EXIT
+  if ! gh release download "$TAG" --repo "$TARGET" --pattern "$APK" --dir "$TMP_DIR"; then
+    echo "::error::Existing release is missing the expected APK; refusing to overwrite it"
+    exit 1
+  fi
+  if ! cmp -s "$APK" "$TMP_DIR/$APK"; then
+    echo "::error::Existing release contains a different signed APK; refusing to overwrite it"
+    exit 1
+  fi
+  echo "Existing release APK matches; resuming manifest publication"
+else
+  gh release create "$TAG" "$APK" --repo "$TARGET" --target main --title "$APP $VERSION ($CHANNEL)" --notes-file release-notes.md --latest=false
 fi
-gh release create "$TAG" "$APK" --repo "$TARGET" --target main --title "$APP $VERSION ($CHANNEL)" --notes-file release-notes.md --latest=false
 URL="https://github.com/$TARGET/releases/download/$TAG/$APK"
 NOTES=$( { grep '^- ' release-notes.md || true; } | head -10 | sed 's/^- //' | jq -R -s 'split("\n") | map(select(length > 0))')
 jq -n --arg channel "$CHANNEL" --arg tag "$TAG" --arg version "$VERSION" --arg apkName "$APK" --arg apkUrl "$URL" --arg pageUrl "https://github.com/$TARGET/releases/tag/$TAG" --arg sha256 "$SHA" --argjson versionCode "$VERSION_CODE" --argjson apkSize "$SIZE" --argjson notes "$NOTES" '{channel:$channel,tag:$tag,versionName:$version,versionCode:$versionCode,apkName:$apkName,apkUrl:$apkUrl,apkSize:$apkSize,sha256:$sha256,pageUrl:$pageUrl,notes:$notes}' > manifest.json
