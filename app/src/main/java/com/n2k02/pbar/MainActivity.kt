@@ -530,10 +530,10 @@ class MainActivity : ComponentActivity() {
                                         Text("No apps match your filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     } else {
                                         visibleApps.forEach { (packageName, label) ->
-                                            ElevatedCard(Modifier.fillMaxWidth(), onClick = {
+                                            ElevatedCard(onClick = {
                                                 if (multiSelectApps) selectedPackages = if (packageName in selectedPackages) selectedPackages - packageName else selectedPackages + packageName
                                                 else selectedApp = packageName
-                                            }) {
+                                            }, modifier = Modifier.fillMaxWidth()) {
                                                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                                     if (multiSelectApps) Checkbox(checked = packageName in selectedPackages, onCheckedChange = { checked -> selectedPackages = if (checked) selectedPackages + packageName else selectedPackages - packageName })
                                                     val iconBitmap = remember(packageName) { loadAppIcon(packageManager, packageName) }
