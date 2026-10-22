@@ -117,6 +117,8 @@ class MainActivity : ComponentActivity() {
         var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
         var appsSearch by remember { mutableStateOf("") }
         var appsFilter by remember { mutableStateOf("All") }
+        var multiSelectApps by remember { mutableStateOf(false) }
+        var selectedPackages by remember { mutableStateOf(setOf<String>()) }
         var selectedApp by remember { mutableStateOf<String?>(null) }
         var installedAppsRevision by remember { mutableIntStateOf(0) }
         var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
@@ -482,13 +484,33 @@ class MainActivity : ComponentActivity() {
                                     }
                                     val visibleApps = installedApps.filter { (pkg, label) ->
                                         (appsSearch.isBlank() || label.contains(appsSearch, ignoreCase = true) || pkg.contains(appsSearch, ignoreCase = true)) &&
-                                            (appsFilter == "All" || (appsFilter == "Enabled" && pkg !in ignoredPackages) || (appsFilter == "Disabled" && pkg in ignoredPackages))
+                                            (appsFilter == "All" || (appsFilter == "Enabled" && pkg !in ignoredPackages) || (appsFilter == "Disabled" && pkg in ignoredPackages) || (appsFilter == "Detected" && pkg in knownPackages))
                                     }
                                     ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("${installedApps.count { it.first !in ignoredPackages }} enabled", style = MaterialTheme.typography.titleLarge); Text("${installedApps.size} installed or detected apps", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                                     OutlinedTextField(value = appsSearch, onValueChange = { appsSearch = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        listOf("All", "Enabled", "Disabled").forEach { option ->
+                                        listOf("All", "Enabled", "Disabled", "Detected").forEach { option ->
                                             FilterChip(selected = appsFilter == option, onClick = { appsFilter = option }, label = { Text(option) })
+                                        }
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { multiSelectApps = !multiSelectApps; selectedPackages = emptySet() }) { Text(if (multiSelectApps) "Done" else "Select multiple") }
+                                        if (multiSelectApps) Text("${selectedPackages.size} selected", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                    if (multiSelectApps && selectedPackages.isNotEmpty()) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Button(onClick = {
+                                                ignoredPackages = ignoredPackages - selectedPackages
+                                                prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
+                                                refreshOverlay()
+                                                selectedPackages = emptySet()
+                                            }, modifier = Modifier.weight(1f)) { Text("Enable selected") }
+                                            OutlinedButton(onClick = {
+                                                ignoredPackages = ignoredPackages + selectedPackages
+                                                prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
+                                                refreshOverlay()
+                                                selectedPackages = emptySet()
+                                            }, modifier = Modifier.weight(1f)) { Text("Disable selected") }
                                         }
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -510,6 +532,11 @@ class MainActivity : ComponentActivity() {
                                             ElevatedCard(Modifier.fillMaxWidth()) {
                                             Column(Modifier.padding(14.dp)) {
                                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                if (multiSelectApps) {
+                                                    Checkbox(checked = packageName in selectedPackages, onCheckedChange = { checked ->
+                                                        selectedPackages = if (checked) selectedPackages + packageName else selectedPackages - packageName
+                                                    })
+                                                }
                                                 val appIcon = remember(packageName) { loadAppIcon(packageManager, packageName) }
                                                 if (appIcon != null) {
                                                     Image(bitmap = appIcon, contentDescription = null, modifier = Modifier.size(44.dp))
@@ -531,8 +558,8 @@ class MainActivity : ComponentActivity() {
                                                     var appRingOffsetY by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_offset_y", prefs.getInt("ring_offset_y", 0)).coerceIn(0, 80)) }
                                                     Text(label, modifier = Modifier.clickable { selectedApp = if (advancedExpanded) null else packageName }, style = MaterialTheme.typography.titleMedium)
                                                     Text(if (packageName in knownPackages) "Detected progress source" else "Installed app", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    TextButton(onClick = { selectedApp = if (advancedExpanded) null else packageName }) { Text(if (advancedExpanded) "Hide settings" else "Customize appearance") }
-                                                    if (advancedExpanded) Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    if (!multiSelectApps) TextButton(onClick = { selectedApp = if (advancedExpanded) null else packageName }) { Text(if (advancedExpanded) "Hide settings" else "Customize appearance") }
+                                                    if (advancedExpanded && !multiSelectApps) Row(verticalAlignment = Alignment.CenterVertically) {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
                                                         TextButton(onClick = { colorMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text("Colour: $currentColorName") }
@@ -551,7 +578,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                         TextButton(onClick = { selectedApp = if (advancedExpanded) null else packageName }, shapes = ButtonDefaults.shapes()) { Text(if (advancedExpanded) "Less" else "Customize") }
                                                     }
-                                                    if (advancedExpanded) {
+                                                    if (advancedExpanded && !multiSelectApps) {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             OutlinedTextField(
                                                                 value = appCustomHex,
