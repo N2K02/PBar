@@ -45,6 +45,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -248,10 +249,19 @@ fun SettingsMenuButton(onOpenUpdates: () -> Unit) {
 @Composable
 fun UpdatesPage(modifier: Modifier = Modifier) {
     val state by AppUpdater.state.collectAsState()
+    val experimentalEnabled by AppUpdater.experimentalEnabled.collectAsState()
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Experimental updates", style = MaterialTheme.typography.titleSmall)
+                Text("Opt in to preview builds. Stable releases stay the default.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = experimentalEnabled, onCheckedChange = AppUpdater::setExperimentalEnabled)
+        }
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
