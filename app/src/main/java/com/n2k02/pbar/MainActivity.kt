@@ -44,6 +44,27 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         AppUpdater.init(this, "N2K02/PBar", "PBar")
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
+        // Only initialize the app allowlist for new installs. Existing preferences,
+        // including apps users have enabled or disabled themselves, are untouched.
+        if (!prefs.contains("default_ignored_v1") && !prefs.contains("ignored_packages")) {
+            @Suppress("DEPRECATION")
+            val installed = packageManager.getInstalledApplications(0).map { it.packageName }
+            val mediaPlayers = setOf(
+                "com.google.android.youtube", "com.google.android.apps.youtube.music",
+                "com.spotify.music", "com.amazon.mp3", "com.apple.android.music",
+                "com.soundcloud.android", "com.pandora.android", "com.tidal",
+                "com.deezer.android.app", "com.google.android.apps.podcasts",
+                "com.pocketcasts", "com.bambuna.podcastaddict",
+                "org.videolan.vlc", "com.mxtech.videoplayer.ad",
+                "com.mxtech.videoplayer.pro", "com.plexapp.android",
+                "tv.twitch.android.app", "com.netflix.mediaclient",
+                "com.disney.disneyplus", "com.google.android.videos"
+            )
+            prefs.edit()
+                .putStringSet("ignored_packages", (installed - mediaPlayers - packageName).toSet())
+                .putBoolean("default_ignored_v1", true)
+                .apply()
+        }
         val legacy = prefs.edit().putBoolean("overlay_enabled", true).putString("style", "line")
         prefs.all.forEach { (key, value) ->
             if (key.startsWith("app_") && key.endsWith("_style") && value == "ring") legacy.remove(key)
