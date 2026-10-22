@@ -68,7 +68,9 @@ jobs:
           else
             echo "VERSION_SUFFIX=" >> "$GITHUB_ENV"
           fi
-          prev="$last"
+          # A public website release tag may not exist in this source Git checkout.
+          prev=""
+          if [ -n "$last" ] && git rev-parse -q --verify "refs/tags/$last" >/dev/null; then prev="$last"; fi
           if [ -n "$prev" ]; then range="$prev..HEAD"; else range="HEAD"; fi
           changes=$(git log --no-merges --pretty='- %s' "$range" | head -40)
           [ -n "$changes" ] || changes="- Initial release and maintenance"
