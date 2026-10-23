@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Home
@@ -40,6 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), UPDATES("Updates") }
 
@@ -126,7 +131,7 @@ class MainActivity : ComponentActivity() {
         var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
-        var customColorHex by remember { mutableStateOf(prefs.getString("indicator_custom_color", "#8B5CF6") ?: "#8B5CF6") }
+        var customColorHex by remember { mutableStateOf(prefs.getString("indicator_custom_color", "") ?: "") }
         var customColorMessage by remember { mutableStateOf("") }
         var hideFullscreen by remember { mutableStateOf(prefs.getBoolean("hide_fullscreen", false)) }
         var showOnLockScreen by remember { mutableStateOf(prefs.getBoolean("show_on_lock_screen", false)) }
@@ -149,6 +154,10 @@ class MainActivity : ComponentActivity() {
             if (selectedApp != null) selectedApp = null else tab = Tab.HOME
         }
         var installedAppsRevision by remember { mutableIntStateOf(0) }
+        var installedApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+        var appsLoading by remember { mutableStateOf(false) }
+        var appsLoaded by remember { mutableStateOf(false) }
+        var appsLoadError by remember { mutableStateOf<String?>(null) }
         var ignoredPackages by remember { mutableStateOf(prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()) }
         var appColorOverrides by remember {
             mutableStateOf(
@@ -225,6 +234,36 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Query package metadata off the UI thread; tab changes and refreshes cancel stale results.
+        LaunchedEffect(tab, installedAppsRevision, knownPackages) {
+            if (tab == Tab.APPS) {
+                appsLoading = true
+                appsLoadError = null
+                try {
+                    val loaded = withContext(Dispatchers.IO) {
+                        @Suppress("DEPRECATION")
+                        val installed = packageManager.getInstalledApplications(0)
+                            .filter { it.packageName != packageName && (it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || packageManager.getLaunchIntentForPackage(it.packageName) != null) }
+                            .map { it.packageName }
+                        (installed + knownPackages).distinct().map { pkg ->
+                            val label = runCatching {
+                                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                            }.getOrDefault(pkg)
+                            pkg to label
+                        }.sortedWith(compareBy<Pair<String, String>> { it.first !in knownPackages }.thenBy { it.second.lowercase() })
+                    }
+                    installedApps = loaded
+                    appsLoaded = true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    appsLoadError = "Could not load apps. Tap Refresh list to try again."
+                } finally {
+                    appsLoading = false
+                }
+            }
+        }
+
         val dark = isSystemInDarkTheme()
         val scheme = when {
             Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(context)
@@ -250,7 +289,9 @@ class MainActivity : ComponentActivity() {
                 }
             ) { padding ->
                 Column(
-                    Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
+                    Modifier.fillMaxSize().padding(padding)
+                        .then(if (tab == Tab.APPS && selectedApp == null) Modifier else Modifier.verticalScroll(rememberScrollState()))
+                        .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     when (tab) {
@@ -380,8 +421,9 @@ class MainActivity : ComponentActivity() {
                                     OutlinedTextField(
                                         value = customColorHex,
                                         onValueChange = { customColorHex = it; customColorMessage = "" },
-                                        label = { Text("Default colour (hex)") },
-                                        supportingText = { Text(customColorMessage.ifBlank { "Example: #8B5CF6" }) },
+                                        label = { Text("Fallback colour (hex)") },
+                                        placeholder = { Text("#8B5CF6") },
+                                        supportingText = { Text(customColorMessage.ifBlank { "Used when the source app has no colour. Leave unset to use the system colour." }) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -395,6 +437,16 @@ class MainActivity : ComponentActivity() {
                                             if (overlayEnabled) refreshOverlay()
                                         } else customColorMessage = "Enter a valid hex colour, such as #8B5CF6"
                                     }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Apply custom colour") }
+                                    OutlinedButton(onClick = {
+                                        appColor = true
+                                        customColorHex = ""
+                                        customColorMessage = "Using app colours (system colour fallback)"
+                                        prefs.edit().putBoolean("app_color", true).remove("indicator_custom_color").apply()
+                                        if (overlayEnabled) refreshOverlay()
+                                    }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                        Text("Reset to app colours")
+                                    }
+                                    Text("Individual app colour overrides can be cleared under Apps → Colour → Automatic.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Position", style = MaterialTheme.typography.titleMedium)
                                     val positionOptions = if (orientation == "vertical") {
                                         listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
@@ -488,95 +540,123 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         Tab.APPS -> {
-                                    val installedApps = remember(installedAppsRevision, knownPackages) {
-                                        @Suppress("DEPRECATION")
-                                        val installed = packageManager.getInstalledApplications(0)
-                                            .filter { it.packageName != packageName && (it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || packageManager.getLaunchIntentForPackage(it.packageName) != null) }
-                                            .map { it.packageName }
-                                        (installed + knownPackages).distinct().map { pkg ->
-                                            val label = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
-                                            pkg to label
-                                        }.sortedWith(compareBy<Pair<String, String>> { it.first !in knownPackages }.thenBy { it.second.lowercase() })
-                                    }
                             if (selectedApp == null) {
-                            Text("Your apps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("Select which installed apps can show progress. Tap an app to customize its appearance.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Button(onClick = {
-                                            knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
-                                            ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
-                                            installedAppsRevision++
-                                            appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap()
-                                        }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Refresh list") }
-
-                                    }
-                                    val visibleApps = installedApps.filter { (pkg, label) ->
-                                        (appsSearch.isBlank() || label.contains(appsSearch, ignoreCase = true) || pkg.contains(appsSearch, ignoreCase = true)) &&
-                                            (appsFilter == "All" || (appsFilter == "Enabled" && pkg !in ignoredPackages) || (appsFilter == "Disabled" && pkg in ignoredPackages) || (appsFilter == "Detected" && pkg in knownPackages))
-                                    }
-                                    ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("${installedApps.count { it.first !in ignoredPackages }} enabled", style = MaterialTheme.typography.titleLarge); Text("${installedApps.size} installed or detected apps", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-                                    OutlinedTextField(value = appsSearch, onValueChange = { appsSearch = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        listOf("All", "Enabled", "Disabled", "Detected").forEach { option ->
-                                            FilterChip(selected = appsFilter == option, onClick = { appsFilter = option }, label = { Text(option) })
-                                        }
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        TextButton(onClick = { multiSelectApps = !multiSelectApps; selectedPackages = emptySet() }) { Text(if (multiSelectApps) "Done" else "Select multiple") }
-                                        if (multiSelectApps) Text("${selectedPackages.size} selected", style = MaterialTheme.typography.labelMedium)
-                                    }
-                                    if (multiSelectApps && selectedPackages.isNotEmpty()) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val visibleApps = installedApps.filter { (appPackage, label) ->
+                                    (appsSearch.isBlank() || label.contains(appsSearch, ignoreCase = true) || appPackage.contains(appsSearch, ignoreCase = true)) &&
+                                        (appsFilter == "All" || (appsFilter == "Enabled" && appPackage !in ignoredPackages) || (appsFilter == "Disabled" && appPackage in ignoredPackages) || (appsFilter == "Detected" && appPackage in knownPackages))
+                                }
+                                // A bounded LazyColumn avoids composing every installed app and icon up front.
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxWidth().weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    contentPadding = PaddingValues(bottom = 8.dp)
+                                ) {
+                                    item {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text("Your apps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                            Text("Select which installed apps can show progress. Tap an app to customize its appearance.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Button(onClick = {
-                                                ignoredPackages = ignoredPackages - selectedPackages
-                                                prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
-                                                refreshOverlay()
-                                                selectedPackages = emptySet()
-                                            }, modifier = Modifier.weight(1f)) { Text("Enable selected") }
-                                            OutlinedButton(onClick = {
-                                                ignoredPackages = ignoredPackages + selectedPackages
-                                                prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
-                                                refreshOverlay()
-                                                selectedPackages = emptySet()
-                                            }, modifier = Modifier.weight(1f)) { Text("Disable selected") }
+                                                knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
+                                                ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
+                                                installedAppsRevision++
+                                                appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry ->
+                                                    val split = entry.split("=", limit = 2)
+                                                    if (split.size == 2) split[0] to split[1] else null
+                                                }.toMap()
+                                            }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Refresh list") }
+
+                                            if (appsLoaded) {
+                                                ElevatedCard(Modifier.fillMaxWidth()) {
+                                                    Column(Modifier.padding(16.dp)) {
+                                                        Text("${installedApps.count { it.first !in ignoredPackages }} enabled", style = MaterialTheme.typography.titleLarge)
+                                                        Text("${installedApps.size} installed or detected apps", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                }
+                                            }
+                                            OutlinedTextField(value = appsSearch, onValueChange = { appsSearch = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                listOf("All", "Enabled", "Disabled", "Detected").forEach { option ->
+                                                    FilterChip(selected = appsFilter == option, onClick = { appsFilter = option }, label = { Text(option) })
+                                                }
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                TextButton(onClick = { multiSelectApps = !multiSelectApps; selectedPackages = emptySet() }) { Text(if (multiSelectApps) "Done" else "Select multiple") }
+                                                if (multiSelectApps) Text("${selectedPackages.size} selected", style = MaterialTheme.typography.labelMedium)
+                                            }
+                                            if (multiSelectApps && selectedPackages.isNotEmpty()) {
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Button(onClick = {
+                                                        ignoredPackages = ignoredPackages - selectedPackages
+                                                        prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
+                                                        refreshOverlay()
+                                                        selectedPackages = emptySet()
+                                                    }, modifier = Modifier.weight(1f)) { Text("Enable selected") }
+                                                    OutlinedButton(onClick = {
+                                                        ignoredPackages = ignoredPackages + selectedPackages
+                                                        prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
+                                                        refreshOverlay()
+                                                        selectedPackages = emptySet()
+                                                    }, modifier = Modifier.weight(1f)) { Text("Disable selected") }
+                                                }
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                OutlinedButton(onClick = {
+                                                    ignoredPackages = emptySet()
+                                                    prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
+                                                    refreshOverlay()
+                                                }, enabled = appsLoaded, modifier = Modifier.weight(1f)) { Text("Enable all") }
+                                                OutlinedButton(onClick = {
+                                                    ignoredPackages = installedApps.map { it.first }.toSet()
+                                                    prefs.edit().putStringSet("ignored_packages", ignoredPackages).putBoolean("has_signal", false).apply()
+                                                    refreshOverlay()
+                                                }, enabled = appsLoaded, modifier = Modifier.weight(1f)) { Text("Disable all") }
+                                            }
                                         }
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(onClick = {
-                                            ignoredPackages = emptySet()
-                                            prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
-                                            refreshOverlay()
-                                        }, modifier = Modifier.weight(1f)) { Text("Enable all") }
-                                        OutlinedButton(onClick = {
-                                            ignoredPackages = installedApps.map { it.first }.toSet()
-                                            prefs.edit().putStringSet("ignored_packages", ignoredPackages).putBoolean("has_signal", false).apply()
-                                            refreshOverlay()
-                                        }, modifier = Modifier.weight(1f)) { Text("Disable all") }
-                                    }
-                                    if (visibleApps.isEmpty()) {
-                                        Text("No apps match your filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    } else {
-                                        visibleApps.forEach { (packageName, label) ->
-                                            ElevatedCard(onClick = {
-                                                if (multiSelectApps) selectedPackages = if (packageName in selectedPackages) selectedPackages - packageName else selectedPackages + packageName
-                                                else selectedApp = packageName
-                                            }, modifier = Modifier.fillMaxWidth()) {
-                                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                    if (multiSelectApps) Checkbox(checked = packageName in selectedPackages, onCheckedChange = { checked -> selectedPackages = if (checked) selectedPackages + packageName else selectedPackages - packageName })
-                                                    val iconBitmap = remember(packageName) { loadAppIcon(packageManager, packageName) }
-                                                    if (iconBitmap != null) Image(bitmap = iconBitmap, contentDescription = null, modifier = Modifier.size(44.dp))
-                                                    Column(Modifier.weight(1f)) {
-                                                        Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                                                        Text(if (packageName in knownPackages) "Detected · " + if (packageName in ignoredPackages) "Disabled" else "Enabled" else if (packageName in ignoredPackages) "Disabled" else "Enabled", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    }
-                                                    if (!multiSelectApps) Switch(checked = packageName !in ignoredPackages, onCheckedChange = { enabled ->
-                                                        ignoredPackages = if (enabled) ignoredPackages - packageName else ignoredPackages + packageName
-                                                        prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
-                                                        if (!enabled && prefs.getString("signal_package", null) == packageName) prefs.edit().putBoolean("has_signal", false).apply()
-                                                        refreshOverlay()
-                                                    })
+                                    if (appsLoading) {
+                                        item {
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                                    Text(if (appsLoaded) "Refreshing apps…" else "Loading apps…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
+                                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                            }
+                                        }
+                                    }
+                                    if (appsLoadError != null) {
+                                        item { Text(appsLoadError!!, color = MaterialTheme.colorScheme.error) }
+                                    }
+                                    if (appsLoaded && !appsLoading && visibleApps.isEmpty()) {
+                                        item { Text("No apps match your filter.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    }
+                                    items(visibleApps, key = { it.first }) { (appPackage, label) ->
+                                        ElevatedCard(onClick = {
+                                            if (multiSelectApps) selectedPackages = if (appPackage in selectedPackages) selectedPackages - appPackage else selectedPackages + appPackage
+                                            else selectedApp = appPackage
+                                        }, modifier = Modifier.fillMaxWidth()) {
+                                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                if (multiSelectApps) Checkbox(checked = appPackage in selectedPackages, onCheckedChange = { checked ->
+                                                    selectedPackages = if (checked) selectedPackages + appPackage else selectedPackages - appPackage
+                                                })
+                                                val iconBitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = appPackage) {
+                                                    value = withContext(Dispatchers.IO) { loadAppIcon(packageManager, appPackage) }
+                                                }
+                                                if (iconBitmap != null) Image(bitmap = iconBitmap!!, contentDescription = null, modifier = Modifier.size(44.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                                                    Text(
+                                                        if (appPackage in knownPackages) "Detected · " + if (appPackage in ignoredPackages) "Disabled" else "Enabled"
+                                                        else if (appPackage in ignoredPackages) "Disabled" else "Enabled",
+                                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                if (!multiSelectApps) Switch(checked = appPackage !in ignoredPackages, onCheckedChange = { enabled ->
+                                                    ignoredPackages = if (enabled) ignoredPackages - appPackage else ignoredPackages + appPackage
+                                                    prefs.edit().putStringSet("ignored_packages", ignoredPackages).apply()
+                                                    if (!enabled && prefs.getString("signal_package", null) == appPackage) prefs.edit().putBoolean("has_signal", false).apply()
+                                                    refreshOverlay()
+                                                })
                                             }
                                         }
                                     }
