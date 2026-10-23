@@ -145,7 +145,7 @@ fun SettingsMenuButton(onOpenUpdates: () -> Unit) {
 @Composable
 fun UpdatesPage(modifier: Modifier = Modifier) {
     val state by LiveUpdater.controller.status.collectAsState()
-    val experimentalEnabled by AppUpdater.experimentalEnabled.collectAsState()
+    val experimentalEnabled by LiveUpdater.experimentalEnabled.collectAsState()
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -156,29 +156,7 @@ fun UpdatesPage(modifier: Modifier = Modifier) {
                 Text("Opt in to preview builds. Stable releases stay the default.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(checked = experimentalEnabled, onCheckedChange = AppUpdater::setExperimentalEnabled)
-        }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Installed version", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("PBar v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Check GitHub for the latest release, review what's new, and install updates.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Button(
-                    onClick = { LiveUpdater.controller.check(manual = true) },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = state !is dev.n2k02.updater.UpdateStatus.Checking && state !is dev.n2k02.updater.UpdateStatus.Downloading,
-                ) {
-                    Text(if (state is dev.n2k02.updater.UpdateStatus.Checking) "Checking for updates…" else "Check for updates")
-                }
-            }
+            Switch(checked = experimentalEnabled, onCheckedChange = LiveUpdater::setExperimentalEnabled)
         }
         UpdateCard()
     }
