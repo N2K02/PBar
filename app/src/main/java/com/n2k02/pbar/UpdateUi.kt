@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenuItem
@@ -158,7 +159,7 @@ fun UpdatesPage(modifier: Modifier = Modifier) {
             supportingContent = { Text("Version " + BuildConfig.VERSION_NAME) },
             leadingContent = {
                 androidx.compose.material3.Icon(
-                    androidx.compose.material.icons.Icons.Filled.Info,
+                    androidx.compose.material.icons.Icons.Default.Info,
                     contentDescription = null,
                 )
             },
