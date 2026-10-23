@@ -604,12 +604,12 @@ class MainActivity : ComponentActivity() {
                                                     ignoredPackages = emptySet()
                                                     prefs.edit().putStringSet("ignored_packages", emptySet()).apply()
                                                     refreshOverlay()
-                                                }, modifier = Modifier.weight(1f)) { Text("Enable all") }
+                                                }, enabled = appsLoaded, modifier = Modifier.weight(1f)) { Text("Enable all") }
                                                 OutlinedButton(onClick = {
                                                     ignoredPackages = installedApps.map { it.first }.toSet()
                                                     prefs.edit().putStringSet("ignored_packages", ignoredPackages).putBoolean("has_signal", false).apply()
                                                     refreshOverlay()
-                                                }, modifier = Modifier.weight(1f)) { Text("Disable all") }
+                                                }, enabled = appsLoaded, modifier = Modifier.weight(1f)) { Text("Disable all") }
                                             }
                                         }
                                     }
