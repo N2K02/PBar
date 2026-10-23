@@ -230,7 +230,7 @@ class MainActivity : ComponentActivity() {
             dark -> darkColorScheme()
             else -> lightColorScheme()
         }
-        MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.expressive()) {
+        MaterialExpressiveTheme(colorScheme = scheme, shapes = androidx.compose.material3.MaterialTheme.shapes.copy(extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)), motionScheme = MotionScheme.expressive()) {
             Scaffold(
                 contentWindowInsets = WindowInsets.safeDrawing,
                 topBar = {
