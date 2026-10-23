@@ -146,10 +146,17 @@ fun SettingsMenuButton(onOpenUpdates: () -> Unit) {
 fun UpdatesPage(modifier: Modifier = Modifier) {
     val state by LiveUpdater.controller.status.collectAsState()
     val experimentalEnabled by LiveUpdater.experimentalEnabled.collectAsState()
+    // Match MRadio's About & updates layout, without playback diagnostics.
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        androidx.compose.material3.ListItem(
+            headlineContent = { Text("PBar") },
+            supportingContent = { Text("Version " + BuildConfig.VERSION_NAME) },
+            leadingContent = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Settings, contentDescription = null) },
+        )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f)) {
                 Text("Experimental updates", style = MaterialTheme.typography.titleSmall)
@@ -158,6 +165,8 @@ fun UpdatesPage(modifier: Modifier = Modifier) {
             }
             Switch(checked = experimentalEnabled, onCheckedChange = LiveUpdater::setExperimentalEnabled)
         }
+        androidx.compose.material3.HorizontalDivider()
+        Text("App updates", style = MaterialTheme.typography.titleLarge)
         UpdateCard()
     }
 }
