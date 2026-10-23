@@ -40,6 +40,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -280,7 +281,11 @@ fun UpdatesPage(modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxWidth(),
                     enabled = state !is AppUpdater.State.Checking && state !is AppUpdater.State.Downloading,
                 ) {
-                    Text(if (state is AppUpdater.State.Checking) "Checking for updates…" else "Check for updates")
+                    if (state is AppUpdater.State.Checking) {
+                        LoadingIndicator(Modifier.size(28.dp))
+                    } else {
+                        Text("Check for updates")
+                    }
                 }
             }
         }
