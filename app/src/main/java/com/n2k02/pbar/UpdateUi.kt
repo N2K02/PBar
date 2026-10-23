@@ -107,7 +107,7 @@ fun UpdateCard(modifier: Modifier = Modifier) {
                 when (val s = state) {
                     is AppUpdater.State.Checking -> {
                         Title("Checking for updates…")
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        LoadingIndicator(Modifier.size(36.dp))
                         Text("Contacting GitHub for the latest release.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     is AppUpdater.State.UpToDate -> {
