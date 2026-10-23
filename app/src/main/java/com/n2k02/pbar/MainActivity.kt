@@ -7,6 +7,8 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
@@ -675,7 +677,7 @@ class MainActivity : ComponentActivity() {
                                                             TextButton(onClick = { orientationMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
                                                             DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
                                                                 listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.ScreenRotation, null) }, onClick = {
+                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = {
                                                                         appOrientation = value
                                                                         val edit = prefs.edit()
                                                                         if (value == "default") edit.remove("app_${packageName}_orientation") else edit.putString("app_${packageName}_orientation", value)
@@ -695,7 +697,7 @@ class MainActivity : ComponentActivity() {
                                                                 } else {
                                                                     listOf("default" to "Default", "left" to "Left", "center" to "Centre", "right" to "Right")
                                                                 }).forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Place, null) }, onClick = {
+                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = {
                                                                         appPosition = value
                                                                         val edit = prefs.edit()
                                                                         if (value == "default") edit.remove("app_${packageName}_position") else edit.putString("app_${packageName}_position", value)
