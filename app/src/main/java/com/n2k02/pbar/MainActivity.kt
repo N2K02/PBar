@@ -43,7 +43,7 @@ private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), A
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AppUpdater.init(this, "N2K02/PBar", "PBar")
+        LiveUpdater.init(this)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         // Only initialize the app allowlist for new installs. Existing preferences,
         // including apps users have enabled or disabled themselves, are untouched.
@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        AppUpdater.onResume(this)
+        LiveUpdater.onResume(this)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("overlay_enabled", true).apply()
         if (Settings.canDrawOverlays(this)) {
