@@ -8,6 +8,7 @@ import android.content.ContextWrapper
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -150,23 +151,38 @@ fun UpdatesPage(modifier: Modifier = Modifier) {
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         androidx.compose.material3.ListItem(
             headlineContent = { Text("PBar") },
             supportingContent = { Text("Version " + BuildConfig.VERSION_NAME) },
-            leadingContent = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Info, contentDescription = null) },
+            leadingContent = {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Filled.Info,
+                    contentDescription = null,
+                )
+            },
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text("Experimental updates", style = MaterialTheme.typography.titleSmall)
-                Text("Opt in to preview builds. Stable releases stay the default.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Switch(checked = experimentalEnabled, onCheckedChange = LiveUpdater::setExperimentalEnabled)
-        }
+        androidx.compose.material3.ListItem(
+            headlineContent = { Text("Experimental updates") },
+            supportingContent = {
+                Text("Offer signed APKs from successful pull request builds. Test builds may have bugs.")
+            },
+            trailingContent = {
+                Switch(
+                    checked = experimentalEnabled,
+                    onCheckedChange = LiveUpdater::setExperimentalEnabled,
+                )
+            },
+            modifier = Modifier.clickable {
+                LiveUpdater.setExperimentalEnabled(!experimentalEnabled)
+            },
+        )
         androidx.compose.material3.HorizontalDivider()
-        Text("App updates", style = MaterialTheme.typography.titleLarge)
-        UpdateCard()
+        dev.n2k02.updater.N2K02UpdateScreen(
+            controller = LiveUpdater.controller,
+            installGuard = LiveUpdater.installGuard,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
     }
 }
