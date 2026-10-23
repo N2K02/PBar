@@ -617,7 +617,7 @@ class MainActivity : ComponentActivity() {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
                                                         TextButton(onClick = { colorMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text("Colour: $currentColorName") }
-                                                        DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
+                                                        DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
                                                             appColorOptions.forEach { (optionName, hex) ->
                                                                 DropdownMenuItem(text = { Text(optionName) }, onClick = {
                                                                     val updated = appColorOverrides.toMutableMap()
@@ -657,7 +657,7 @@ class MainActivity : ComponentActivity() {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Style", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { styleMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(when (appStyle) { "line" -> "Line"; else -> "Default" }) }
-                                                            DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
+                                                            DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
                                                                 listOf("default" to "Default", "line" to "Line").forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appStyle = value
@@ -673,7 +673,7 @@ class MainActivity : ComponentActivity() {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Orientation", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { orientationMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }) {
+                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
                                                                 listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appOrientation = value
@@ -689,7 +689,7 @@ class MainActivity : ComponentActivity() {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Position", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { positionMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
+                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
                                                                 (if ((appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
                                                                     listOf("default" to "Default", "top" to "Top", "bottom" to "Bottom")
                                                                 } else {
