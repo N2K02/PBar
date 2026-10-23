@@ -155,7 +155,7 @@ fun UpdatesPage(modifier: Modifier = Modifier) {
         androidx.compose.material3.ListItem(
             headlineContent = { Text("PBar") },
             supportingContent = { Text("Version " + BuildConfig.VERSION_NAME) },
-            leadingContent = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Settings, contentDescription = null) },
+            leadingContent = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Info, contentDescription = null) },
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f)) {
