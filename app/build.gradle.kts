@@ -43,3 +43,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     debugImplementation("androidx.compose.ui:ui-tooling:1.9.0")
 }
+
+dependencies {
+    if (providers.gradleProperty("useN2K02Libraries").orNull == "true") {
+        implementation("dev.n2k02:theme:0.1.4")
+        implementation("dev.n2k02:updater:0.1.11")
+    }
+}
