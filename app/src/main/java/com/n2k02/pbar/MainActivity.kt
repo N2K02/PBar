@@ -158,8 +158,20 @@ class MainActivity : ComponentActivity() {
         var showTrackingDetails by remember { mutableStateOf(false) }
         var overlayEnabled by remember { mutableStateOf(true) }
         var style by remember { mutableStateOf("line") }
-        var position by remember { mutableStateOf(prefs.getString("position", "top") ?: "top") }
-        var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
+        // Portrait always uses a horizontal line; landscape always uses a vertical one.
+        // Keep independent edge positions when the device rotates.
+        var portraitPosition by remember {
+            mutableStateOf(
+                (prefs.getString("position_portrait", prefs.getString("position", "top")) ?: "top")
+                    .takeIf { it == "top" || it == "bottom" } ?: "top"
+            )
+        }
+        var landscapePosition by remember {
+            mutableStateOf(
+                (prefs.getString("position_landscape", prefs.getString("position", "left")) ?: "left")
+                    .takeIf { it == "left" || it == "center" || it == "right" } ?: "left"
+            )
+        }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
         var customColorHex by remember { mutableStateOf(prefs.getString("indicator_custom_color", "") ?: "") }
@@ -462,7 +474,8 @@ class MainActivity : ComponentActivity() {
                                     val previewColour = runCatching {
                                         ComposeColor(android.graphics.Color.parseColor(customColorHex))
                                     }.getOrNull() ?: MaterialTheme.colorScheme.primary
-                                    ProgressLinePreview(orientation, position, thickness, previewColour,
+                                    ProgressLinePreview(if (landscape) "vertical" else "horizontal",
+                                        if (landscape) landscapePosition else portraitPosition, thickness, previewColour,
                                         indicatorOpacity, roundedCorners, previewProgress)
                                     FilledTonalButton(
                                         onClick = {
@@ -485,27 +498,42 @@ class MainActivity : ComponentActivity() {
                                     Text("Choose where the progress line sits and how thick it is.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                         TextButton(onClick = {
-                                            orientation = "horizontal"; position = "top"; thickness = 4
-                                            prefs.edit().putString("orientation", orientation).putString("position", position).putInt("thickness", thickness).apply()
+                                            portraitPosition = "top"; landscapePosition = "left"; thickness = 4
+                                            prefs.edit()
+                                                .putString("position_portrait", portraitPosition)
+                                                .putString("position_landscape", landscapePosition)
+                                                .putInt("thickness", thickness).apply()
                                             refreshOverlay()
                                         }) { Text("Reset layout") }
                                     }
-                                    Text("Orientation", style = MaterialTheme.typography.titleMedium)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Horizontal") })
-                                        FilterChip(selected = orientation == "vertical", onClick = { orientation = "vertical"; if (position !in listOf("left", "center", "right")) position = "left"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Vertical") })
-                                    }
+                                    Text("Automatic orientation", style = MaterialTheme.typography.titleMedium)
+                                    Text("Portrait: horizontal line · Landscape: vertical line. The bar switches automatically when you rotate your phone.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Thickness: $thickness dp", style = MaterialTheme.typography.titleMedium)
-                                    Slider(value = thickness.toFloat(), onValueChange = { thickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("thickness", thickness).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 2f..12f, steps = 9)
-                                    Text("Position", style = MaterialTheme.typography.titleMedium)
-                                    val positionOptions = if (orientation == "vertical") {
-                                        listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
-                                    } else {
-                                        listOf("top" to "Top edge", "bottom" to "Bottom edge")
-                                    }
-                                    positionOptions.forEach { (value, label) ->
+                                    Slider(value = thickness.toFloat(), onValueChange = {
+                                        thickness = it.toInt().coerceIn(2, 12)
+                                        prefs.edit().putInt("thickness", thickness).apply()
+                                        if (overlayEnabled) refreshOverlay()
+                                    }, valueRange = 2f..12f, steps = 9)
+                                    Text("Portrait position", style = MaterialTheme.typography.titleMedium)
+                                    listOf("top" to "Top edge", "bottom" to "Bottom edge").forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            RadioButton(selected = position == value, onClick = { position = value; prefs.edit().putString("position", value).apply(); if (overlayEnabled) refreshOverlay() })
+                                            RadioButton(selected = portraitPosition == value, onClick = {
+                                                portraitPosition = value
+                                                prefs.edit().putString("position_portrait", value).apply()
+                                                if (overlayEnabled) refreshOverlay()
+                                            })
+                                            Text(label)
+                                        }
+                                    }
+                                    Text("Landscape position", style = MaterialTheme.typography.titleMedium)
+                                    listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge").forEach { (value, label) ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            RadioButton(selected = landscapePosition == value, onClick = {
+                                                landscapePosition = value
+                                                prefs.edit().putString("position_landscape", value).apply()
+                                                if (overlayEnabled) refreshOverlay()
+                                            })
                                             Text(label)
                                         }
                                     }
@@ -855,11 +883,23 @@ class MainActivity : ComponentActivity() {
                                                 Column(Modifier.weight(1f)) {
                                                     val advancedExpanded = true
                                                     var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var portraitMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var landscapeMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
-                                                    var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
-                                                    var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
+                                                    var appPortraitPosition by remember(packageName) {
+                                                        mutableStateOf(
+                                                            prefs.getString("app_${packageName}_position_portrait",
+                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
+                                                                .takeIf { it == "top" || it == "bottom" } ?: "default"
+                                                        )
+                                                    }
+                                                    var appLandscapePosition by remember(packageName) {
+                                                        mutableStateOf(
+                                                            prefs.getString("app_${packageName}_position_landscape",
+                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
+                                                                .takeIf { it == "left" || it == "center" || it == "right" } ?: "default"
+                                                        )
+                                                    }
                                                     var appCustomHex by remember(packageName) { mutableStateOf(appColorOverrides[packageName] ?: "") }
                                                     var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)) }
                                                     var appRingSize by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_size", prefs.getInt("ring_size", 36)).coerceIn(24, 80)) }
@@ -926,38 +966,46 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             }
                                                         }
+                                                        Text("Orientation: Automatic (portrait = horizontal, landscape = vertical)",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Text("Orientation", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { orientationMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }) {
-                                                                listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = {
-                                                                        appOrientation = value
+                                                            Text("Portrait position", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { portraitMenuExpanded = true }, shapes = ButtonDefaults.shapes()) {
+                                                                Text(if (appPortraitPosition == "default") "Global default"
+                                                                    else appPortraitPosition.replaceFirstChar { it.uppercase() })
+                                                            }
+                                                            DropdownMenu(expanded = portraitMenuExpanded, onDismissRequest = { portraitMenuExpanded = false }) {
+                                                                listOf("default" to "Global default", "top" to "Top", "bottom" to "Bottom").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appPortraitPosition = value
                                                                         val edit = prefs.edit()
-                                                                        if (value == "default") edit.remove("app_${packageName}_orientation") else edit.putString("app_${packageName}_orientation", value)
-                                                                        edit.apply()
-                                                                        orientationMenuExpanded = false
-                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                        if (value == "default") edit.remove("app_${packageName}_position_portrait")
+                                                                        else edit.putString("app_${packageName}_position_portrait", value)
+                                                                        // Older single-position overrides must not override a reset.
+                                                                        edit.remove("app_${packageName}_position").apply()
+                                                                        portraitMenuExpanded = false
+                                                                        refreshOverlay()
                                                                     })
                                                                 }
                                                             }
                                                         }
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Text("Position", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { positionMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
-                                                                (if ((appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
-                                                                    listOf("default" to "Default", "top" to "Top", "bottom" to "Bottom")
-                                                                } else {
-                                                                    listOf("default" to "Default", "left" to "Left", "center" to "Centre", "right" to "Right")
-                                                                }).forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = {
-                                                                        appPosition = value
+                                                            Text("Landscape position", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { landscapeMenuExpanded = true }, shapes = ButtonDefaults.shapes()) {
+                                                                Text(if (appLandscapePosition == "default") "Global default"
+                                                                    else appLandscapePosition.replaceFirstChar { it.uppercase() })
+                                                            }
+                                                            DropdownMenu(expanded = landscapeMenuExpanded, onDismissRequest = { landscapeMenuExpanded = false }) {
+                                                                listOf("default" to "Global default", "left" to "Left", "center" to "Centre", "right" to "Right").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appLandscapePosition = value
                                                                         val edit = prefs.edit()
-                                                                        if (value == "default") edit.remove("app_${packageName}_position") else edit.putString("app_${packageName}_position", value)
-                                                                        edit.apply()
-                                                                        positionMenuExpanded = false
-                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                        if (value == "default") edit.remove("app_${packageName}_position_landscape")
+                                                                        else edit.putString("app_${packageName}_position_landscape", value)
+                                                                        edit.remove("app_${packageName}_position").apply()
+                                                                        landscapeMenuExpanded = false
+                                                                        refreshOverlay()
                                                                     })
                                                                 }
                                                             }
@@ -966,8 +1014,8 @@ class MainActivity : ComponentActivity() {
                                                         Slider(value = appThickness.toFloat(), onValueChange = { appThickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("app_${packageName}_thickness", appThickness).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..12f, steps = 9)
 
                                                         TextButton(onClick = {
-                                                            prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
-                                                            appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 36); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 0); appRingStroke = prefs.getInt("ring_stroke", 5)
+                                                            prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_position_portrait").remove("app_${packageName}_position_landscape").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
+                                                            appStyle = "default"; appPortraitPosition = "default"; appLandscapePosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 36); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 0); appRingStroke = prefs.getInt("ring_stroke", 5)
                                                             sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
                                                         }, shapes = ButtonDefaults.shapes()) { Text("Reset app style") }
                                                     }
