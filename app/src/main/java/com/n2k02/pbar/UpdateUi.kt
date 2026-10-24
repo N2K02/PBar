@@ -112,13 +112,18 @@ fun SettingsMenuButton(onOpenUpdates: () -> Unit) {
     val state by LiveUpdater.controller.status.collectAsState()
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+            dev.n2k02.updater.N2K02UpdateBadgedIcon(state) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+            }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = {
                     Column {
-                        Text("Updates")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("About & updates")
+                            dev.n2k02.updater.N2K02UpdateBadge(state)
+                        }
                         Text(
                             when (val u = state) {
                                 is dev.n2k02.updater.UpdateStatus.Checking -> "Checking…"
