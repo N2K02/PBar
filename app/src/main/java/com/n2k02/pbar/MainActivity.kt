@@ -202,6 +202,7 @@ class MainActivity : ComponentActivity() {
         var ringStroke by remember { mutableIntStateOf(prefs.getInt("ring_stroke", 5).coerceIn(2, 10)) }
         var indicatorOpacity by remember { mutableIntStateOf(prefs.getInt("indicator_opacity", 100).coerceIn(20, 100)) }
         var roundedCorners by remember { mutableStateOf(prefs.getBoolean("rounded_corners", true)) }
+        var emphasiseProgress by remember { mutableStateOf(prefs.getBoolean("emphasise_progress", true)) }
         var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
         var appsSearch by remember { mutableStateOf("") }
         var appsFilter by remember { mutableStateOf("All") }
@@ -476,7 +477,7 @@ class MainActivity : ComponentActivity() {
                                     }.getOrNull() ?: MaterialTheme.colorScheme.primary
                                     ProgressLinePreview(if (landscape) "vertical" else "horizontal",
                                         if (landscape) landscapePosition else portraitPosition, thickness, previewColour,
-                                        indicatorOpacity, roundedCorners, previewProgress)
+                                        indicatorOpacity, roundedCorners, emphasiseProgress, previewProgress)
                                     FilledTonalButton(
                                         onClick = {
                                             previewTestKey++
@@ -640,8 +641,9 @@ class MainActivity : ComponentActivity() {
                                     Text("Adjust opacity and the ends of the line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                         TextButton(onClick = {
-                                            indicatorOpacity = 100; roundedCorners = true
-                                            prefs.edit().putInt("indicator_opacity", 100).putBoolean("rounded_corners", true).apply()
+                                            indicatorOpacity = 100; roundedCorners = true; emphasiseProgress = true
+                                            prefs.edit().putInt("indicator_opacity", 100).putBoolean("rounded_corners", true)
+                                                .putBoolean("emphasise_progress", true).apply()
                                             refreshOverlay()
                                         }) { Text("Reset bar finish") }
                                     }
@@ -653,6 +655,18 @@ class MainActivity : ComponentActivity() {
                                             Text("Use soft rounded edges on the progress line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         Switch(checked = roundedCorners, onCheckedChange = { roundedCorners = it; prefs.edit().putBoolean("rounded_corners", it).apply(); if (overlayEnabled) refreshOverlay() })
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("High contrast progress", style = MaterialTheme.typography.titleMedium)
+                                            Text("Make the coloured portion clearer with a dimmer unfilled track and a bright progress tip.",
+                                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = emphasiseProgress, onCheckedChange = { value ->
+                                            emphasiseProgress = value
+                                            prefs.edit().putBoolean("emphasise_progress", value).apply()
+                                            refreshOverlay()
+                                        })
                                     }
                                 }
                             }
@@ -1135,6 +1149,7 @@ private fun ProgressLinePreview(
     colour: ComposeColor,
     opacity: Int,
     rounded: Boolean,
+    emphasiseProgress: Boolean,
     fraction: Float
 ) {
     val vertical = orientation == "vertical"
@@ -1153,14 +1168,23 @@ private fun ProgressLinePreview(
             (if (vertical) Modifier.fillMaxHeight().width(thickness.dp)
              else Modifier.fillMaxWidth().height(thickness.dp))
                 .align(alignment).background(
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.24f), lineShape)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (emphasiseProgress) 0.12f else 0.24f), lineShape)
         ) {
             Box(
                 (if (vertical) Modifier.fillMaxWidth().fillMaxHeight(fraction.coerceIn(0f, 1f))
                  else Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)))
                     .align(if (vertical) Alignment.BottomCenter else Alignment.CenterStart)
                     .background(colour.copy(alpha = opacity / 100f), lineShape)
-            )
+            ) {
+                if (emphasiseProgress && fraction > 0f && fraction < 1f) {
+                    Box(
+                        (if (vertical) Modifier.fillMaxWidth().height(2.dp)
+                         else Modifier.fillMaxHeight().width(2.dp))
+                            .align(if (vertical) Alignment.TopCenter else Alignment.CenterEnd)
+                            .background(ComposeColor.White.copy(alpha = opacity / 100f))
+                    )
+                }
+            }
         }
     }
 }
