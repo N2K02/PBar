@@ -11,6 +11,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -40,6 +43,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color as ComposeColor
+import android.os.SystemClock
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -159,6 +164,21 @@ class MainActivity : ComponentActivity() {
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
         var customColorHex by remember { mutableStateOf(prefs.getString("indicator_custom_color", "") ?: "") }
         var customColorMessage by remember { mutableStateOf("") }
+        var pickerHue by remember { mutableFloatStateOf(265f) }
+        var pickerSaturation by remember { mutableFloatStateOf(0.7f) }
+        var pickerBrightness by remember { mutableFloatStateOf(0.95f) }
+        var previewTestKey by remember { mutableIntStateOf(0) }
+        var previewProgress by remember { mutableFloatStateOf(0.42f) }
+        LaunchedEffect(previewTestKey, tab) {
+            if (tab != Tab.STYLE || previewTestKey == 0) return@LaunchedEffect
+            val start = SystemClock.elapsedRealtime()
+            do {
+                previewProgress = ((SystemClock.elapsedRealtime() - start) / 10_000f).coerceIn(0f, 1f)
+                if (previewProgress >= 1f) break
+                withFrameNanos { }
+            } while (true)
+            previewProgress = 0.42f
+        }
         var hideFullscreen by remember { mutableStateOf(prefs.getBoolean("hide_fullscreen", false)) }
         var showOnLockScreen by remember { mutableStateOf(prefs.getBoolean("show_on_lock_screen", false)) }
         var showForDownloads by remember { mutableStateOf(prefs.getBoolean("show_for_downloads", true)) }
@@ -436,8 +456,40 @@ class MainActivity : ComponentActivity() {
                         Tab.STYLE -> {
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Live preview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("See the global bar style immediately. Apps may apply their own overrides.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    val previewColour = runCatching {
+                                        ComposeColor(android.graphics.Color.parseColor(customColorHex))
+                                    }.getOrNull() ?: MaterialTheme.colorScheme.primary
+                                    ProgressLinePreview(orientation, position, thickness, previewColour,
+                                        indicatorOpacity, roundedCorners, previewProgress)
+                                    FilledTonalButton(
+                                        onClick = {
+                                            previewTestKey++
+                                            if (overlayReady && listenerReady) {
+                                                sendBroadcast(Intent(OverlayController.ACTION_TEST_PROGRESS)
+                                                    .setPackage(this@MainActivity.packageName))
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shapes = ButtonDefaults.shapes()
+                                    ) { Text("Test progress for 10 seconds") }
+                                    Text("The button also tests the actual overlay when display and notification permissions are enabled. Active playback settings are not modified.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Layout & position", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                                     Text("Choose where the progress line sits and how thick it is.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            orientation = "horizontal"; position = "top"; thickness = 4
+                                            prefs.edit().putString("orientation", orientation).putString("position", position).putInt("thickness", thickness).apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset layout") }
+                                    }
                                     Text("Orientation", style = MaterialTheme.typography.titleMedium)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Horizontal") })
@@ -463,6 +515,13 @@ class MainActivity : ComponentActivity() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Colour", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                                     Text("Choose an automatic app colour or your own fallback.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            appColor = true; customColorHex = ""; customColorMessage = ""
+                                            prefs.edit().putBoolean("app_color", true).remove("indicator_custom_color").apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset colour") }
+                                    }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Use app colour", style = MaterialTheme.typography.titleMedium)
@@ -498,6 +557,52 @@ class MainActivity : ComponentActivity() {
                                     }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Reset to app colours")
                                     }
+                                    Text("Quick colours", style = MaterialTheme.typography.titleMedium)
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("#8B5CF6", "#60A5FA", "#55D6BE", "#A6E3A1", "#FFB86C", "#F472B6")
+                                            .forEach { hex ->
+                                                FilterChip(
+                                                    selected = customColorHex.equals(hex, ignoreCase = true) && !appColor,
+                                                    onClick = {
+                                                        appColor = false
+                                                        customColorHex = hex
+                                                        customColorMessage = "Colour applied"
+                                                        prefs.edit().putBoolean("app_color", false).putString("indicator_custom_color", hex).apply()
+                                                        refreshOverlay()
+                                                    },
+                                                    label = { Text(hex) },
+                                                    leadingIcon = {
+                                                        Box(Modifier.size(16.dp).background(
+                                                            ComposeColor(android.graphics.Color.parseColor(hex)), CircleShape))
+                                                    }
+                                                )
+                                            }
+                                    }
+                                    Text("Custom colour picker", style = MaterialTheme.typography.titleMedium)
+                                    val pickedHex = String.format(java.util.Locale.US, "#%06X",
+                                        android.graphics.Color.HSVToColor(floatArrayOf(
+                                            pickerHue, pickerSaturation, pickerBrightness)) and 0xFFFFFF)
+                                    Row(verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Box(Modifier.size(36.dp).background(
+                                            ComposeColor(android.graphics.Color.parseColor(pickedHex)), CircleShape))
+                                        Text(pickedHex, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                    Text("Hue: ${pickerHue.toInt()}°", style = MaterialTheme.typography.bodySmall)
+                                    Slider(value = pickerHue, onValueChange = { pickerHue = it }, valueRange = 0f..360f)
+                                    Text("Saturation: ${(pickerSaturation * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                                    Slider(value = pickerSaturation, onValueChange = { pickerSaturation = it }, valueRange = 0f..1f)
+                                    Text("Brightness: ${(pickerBrightness * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                                    Slider(value = pickerBrightness, onValueChange = { pickerBrightness = it }, valueRange = 0f..1f)
+                                    FilledTonalButton(onClick = {
+                                        appColor = false
+                                        customColorHex = pickedHex
+                                        customColorMessage = "Colour applied"
+                                        prefs.edit().putBoolean("app_color", false).putString("indicator_custom_color", pickedHex).apply()
+                                        refreshOverlay()
+                                    }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                        Text("Use picked colour")
+                                    }
                                     Text("Individual app colour overrides can be cleared under Apps → Colour → Automatic.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -505,6 +610,13 @@ class MainActivity : ComponentActivity() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Bar finish", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                                     Text("Adjust opacity and the ends of the line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            indicatorOpacity = 100; roundedCorners = true
+                                            prefs.edit().putInt("indicator_opacity", 100).putBoolean("rounded_corners", true).apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset bar finish") }
+                                    }
                                     Text("Opacity: $indicatorOpacity%", style = MaterialTheme.typography.bodyMedium)
                                     Slider(value = indicatorOpacity.toFloat(), onValueChange = { indicatorOpacity = it.toInt().coerceIn(20, 100); prefs.edit().putInt("indicator_opacity", indicatorOpacity).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 20f..100f, steps = 39)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -520,6 +632,15 @@ class MainActivity : ComponentActivity() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Tracking sources", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                                     Text("Select which activities PBar should follow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            showForDownloads = true; showForMedia = true; showForTimers = true
+                                            prefs.edit().putBoolean("show_for_downloads", true)
+                                                .putBoolean("show_for_media", true).putBoolean("show_for_timers", true).apply()
+                                            sendBroadcast(Intent(ProgressNotificationListener.ACTION_REFRESH)
+                                                .setPackage(this@MainActivity.packageName))
+                                        }) { Text("Reset tracking") }
+                                    }
                                     listOf(
                                         Triple("Downloads and transfers", "Read notification progress when apps expose it.", showForDownloads),
                                         Triple("Music and media", "Track supported playback sessions.", showForMedia),
@@ -561,6 +682,13 @@ class MainActivity : ComponentActivity() {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Screen behaviour", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                                     Text("Control fullscreen and lock-screen visibility.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            hideFullscreen = false; showOnLockScreen = false
+                                            prefs.edit().putBoolean("hide_fullscreen", false).putBoolean("show_on_lock_screen", false).apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset screen behaviour") }
+                                    }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Hide in fullscreen", style = MaterialTheme.typography.titleSmall)
@@ -929,6 +1057,44 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProgressLinePreview(
+    orientation: String,
+    position: String,
+    thickness: Int,
+    colour: ComposeColor,
+    opacity: Int,
+    rounded: Boolean,
+    fraction: Float
+) {
+    val vertical = orientation == "vertical"
+    val lineShape = if (rounded) RoundedCornerShape(50) else RoundedCornerShape(0.dp)
+    val alignment = if (vertical) when (position) {
+        "right" -> Alignment.CenterEnd
+        "center" -> Alignment.Center
+        else -> Alignment.CenterStart
+    } else if (position == "bottom") Alignment.BottomCenter else Alignment.TopCenter
+    Box(
+        Modifier.fillMaxWidth().height(112.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+            .padding(12.dp)
+    ) {
+        Box(
+            (if (vertical) Modifier.fillMaxHeight().width(thickness.dp)
+             else Modifier.fillMaxWidth().height(thickness.dp))
+                .align(alignment).background(
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.24f), lineShape)
+        ) {
+            Box(
+                (if (vertical) Modifier.fillMaxWidth().fillMaxHeight(fraction.coerceIn(0f, 1f))
+                 else Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)))
+                    .align(if (vertical) Alignment.BottomCenter else Alignment.CenterStart)
+                    .background(colour.copy(alpha = opacity / 100f), lineShape)
+            )
         }
     }
 }
