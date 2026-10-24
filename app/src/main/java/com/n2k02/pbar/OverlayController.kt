@@ -159,12 +159,14 @@ class OverlayController(private val host: Context) {
         private var media = false
         private var signal = false
         private var sourcePackage = ""
+        private var mediaTitle = ""
         private var primaryColor = Color.rgb(103, 80, 164)
         private var opacity = 255
         private var rounded = true
 
         fun updateFrom(prefs: SharedPreferences) {
             val nextPackage = prefs.getString("signal_package", "").orEmpty()
+            val nextTitle = prefs.getString("signal_title", "").orEmpty()
             val nextMedia = prefs.getBoolean("signal_media", false)
             val nextPosition = prefs.getLong(
                 "signal_raw_position", prefs.getLong("signal_position", 0L)
@@ -178,7 +180,7 @@ class OverlayController(private val host: Context) {
             // the progress line to repeatedly stall or jump backward.
             if (nextMedia && playerAnchor > 0L) {
                 mediaAnchorElapsed = playerAnchor
-            } else if (nextPackage != sourcePackage || nextMedia != media ||
+            } else if (nextPackage != sourcePackage || nextTitle != mediaTitle || nextMedia != media ||
                 nextPosition != mediaPositionMs || nextDuration != mediaDurationMs ||
                 nextPlaying != mediaPlaying || nextSpeed != mediaSpeed) {
                 mediaAnchorElapsed = SystemClock.elapsedRealtime()
@@ -197,6 +199,7 @@ class OverlayController(private val host: Context) {
                 else Color.rgb(103, 80, 164)
             } else Color.rgb(103, 80, 164)
             sourcePackage = nextPackage
+            mediaTitle = nextTitle
             val sourceColor = prefs.getInt("signal_color", 0)
             val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
                 .firstOrNull { it.startsWith("$nextPackage=") }
