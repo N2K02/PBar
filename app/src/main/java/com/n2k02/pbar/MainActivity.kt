@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
+        var showTrackingDetails by remember { mutableStateOf(false) }
         var overlayEnabled by remember { mutableStateOf(true) }
         var style by remember { mutableStateOf("line") }
         var position by remember { mutableStateOf(prefs.getString("position", "top") ?: "top") }
@@ -288,8 +289,8 @@ class MainActivity : ComponentActivity() {
                                 val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
                                 enabled.split(':').any { it.equals(ComponentName(this@MainActivity, ProgressNotificationListener::class.java).flattenToString(), ignoreCase = true) }
                             }.getOrDefault(false)
-                            Text("PBar runs in the background", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("Once permissions are granted, PBar watches supported notifications and shows a progress bar automatically. No on/off switch is needed.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("PBar runs automatically", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text("Shows media and download progress over other apps.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -297,13 +298,12 @@ class MainActivity : ComponentActivity() {
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text("Display over other apps", style = MaterialTheme.typography.titleMedium)
-                                            Text(if (overlayReady) "Permission granted" else "Required to show the progress bar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(if (overlayReady) "Ready" else "Permission needed", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                        Text(if (overlayReady) "Ready" else "Needed", style = MaterialTheme.typography.labelMedium)
                                     }
                                     if (!overlayReady) {
                                         Button(onClick = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
-                                            Text("Grant overlay permission")
+                                            Text("Allow display over apps")
                                         }
                                     }
                                     HorizontalDivider()
@@ -312,33 +312,32 @@ class MainActivity : ComponentActivity() {
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text("Notification access", style = MaterialTheme.typography.titleMedium)
-                                            Text(if (listenerReady) "PBar can read supported progress and media notifications" else "Required to detect progress and media", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(if (listenerReady) "Ready" else "Permission needed", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                        Text(if (listenerReady) "Ready" else "Needed", style = MaterialTheme.typography.labelMedium)
                                     }
                                     if (!listenerReady) {
                                         Button(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
-                                            Text("Grant notification access")
+                                            Text("Allow notification access")
                                         }
                                     }
-                                    Text("PBar uses a regular background service without a permanent PBar notification. Android may still stop it under battery or memory pressure.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Live tracking status", style = MaterialTheme.typography.titleLarge)
+                                    Text("Live status", style = MaterialTheme.typography.titleLarge)
                                     Text(
                                         when {
-                                            !signalHas -> "No progress signal is currently saved. Check notification access and whether the source app exposes an active media session or progress notification."
-                                            signalMedia && signalIndeterminate -> "Media detected — timing data is unavailable, so PBar should show a moving indeterminate segment."
-                                            signalMedia && signalDuration > 0L -> "Media detected — " + (if (signalPlaying) "playing" else "paused") + " at " + signalProgress + "%."
-                                            signalMedia -> "Media detected — playback timing is not available."
-                                            signalIndeterminate -> "An indeterminate progress signal is active."
-                                            else -> "Progress signal active: " + signalProgress + "%."
+                                            !signalHas -> "No active progress"
+                                            signalMedia && signalIndeterminate -> "Media · tracking playback"
+                                            signalMedia && signalDuration > 0L -> "Media · " + (if (signalPlaying) "Playing" else "Paused") + " · " + signalProgress + "%"
+                                            signalMedia -> "Media · timing unavailable"
+                                            signalIndeterminate -> "Tracking progress"
+                                            else -> "Progress · " + signalProgress + "%."
                                         },
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    if (signalPackage.isNotBlank()) {
+                                    if (showTrackingDetails) {
+                                        if (signalPackage.isNotBlank()) {
                                         Text("Source: " + signalPackage, style = MaterialTheme.typography.bodySmall)
                                     }
                                     if (signalMedia && signalDuration > 0L) {
@@ -359,25 +358,29 @@ class MainActivity : ComponentActivity() {
                                     if (signalUpdated > 0L) {
                                         Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Button(onClick = { recheckSignalStatus() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
-                                        Text("Refresh status")
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { recheckSignalStatus() }) { Text("Refresh") }
+                                        TextButton(onClick = { showTrackingDetails = !showTrackingDetails }) {
+                                            Text(if (showTrackingDetails) "Hide details" else "Details")
+                                        }
                                     }
                                 }
                             }
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Make it yours", style = MaterialTheme.typography.titleLarge)
-                                    Text("Change bar position, orientation, thickness, colour, opacity, and corner style in Appearance. Choose which apps PBar watches in Apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Customize", style = MaterialTheme.typography.titleLarge)
+                                    Text("Adjust the bar or choose apps to track.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(onClick = { tab = Tab.STYLE }, shapes = ButtonDefaults.shapes()) { Text("Appearance") }
-                                        Button(onClick = { tab = Tab.APPS }, shapes = ButtonDefaults.shapes()) { Text("Choose apps") }
+                                        Button(onClick = { tab = Tab.APPS }, shapes = ButtonDefaults.shapes()) { Text("Apps") }
                                     }
                                 }
                             }
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Quit PBar", style = MaterialTheme.typography.titleLarge)
-                                    Text("Stops the floating progress bar and closes PBar. Open PBar again to resume automatic tracking.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Stops tracking until you reopen PBar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Button(onClick = { quitPBar() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Quit PBar")
                                     }
@@ -386,11 +389,9 @@ class MainActivity : ComponentActivity() {
                         }
                         Tab.STYLE -> {
                             Text("Choose your indicator", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("Changes are saved immediately.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Progress bar", style = MaterialTheme.typography.titleMedium)
-                                    Text("Bar only — ring mode has been removed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Orientation", style = MaterialTheme.typography.titleMedium)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Horizontal") })
@@ -541,7 +542,7 @@ class MainActivity : ComponentActivity() {
                                     item {
                                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                             Text("Your apps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                                            Text("Select which installed apps can show progress. Tap an app to customize its appearance.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Choose apps to track. Tap one to customize.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Button(onClick = {
                                                 knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
                                                 ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
@@ -811,8 +812,6 @@ class MainActivity : ComponentActivity() {
                             UpdatesPage()
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text("PBar • Material 3 Expressive", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
             }
         }
