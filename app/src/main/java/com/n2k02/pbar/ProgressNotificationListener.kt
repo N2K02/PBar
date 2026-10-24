@@ -446,10 +446,23 @@ class ProgressNotificationListener : NotificationListenerService() {
 
     private fun startTimerTicker(sourcePackage: String, remainingMs: Long, totalMs: Long) {
         timerHandler.removeCallbacks(timerTicker)
-        timerPackage = sourcePackage
-        timerRemainingAtStart = remainingMs
-        timerTotalMs = totalMs
-        timerStartElapsed = SystemClock.elapsedRealtime()
+        val now = SystemClock.elapsedRealtime()
+        val projectedRemaining = (timerRemainingAtStart - (now - timerStartElapsed)).coerceAtLeast(0L)
+        // Clock notifications are frequently rounded to seconds. Ignore those small
+        // corrections, so the 60 fps overlay never jerks backward on every update.
+        val sameTimer = timerPackage == sourcePackage && timerTotalMs == totalMs && timerStartElapsed > 0L
+        if (!sameTimer || kotlin.math.abs(projectedRemaining - remainingMs) > 1500L) {
+            timerPackage = sourcePackage
+            timerRemainingAtStart = remainingMs
+            timerTotalMs = totalMs
+            timerStartElapsed = now
+        }
+        getSharedPreferences("pbar", MODE_PRIVATE).edit()
+            .putLong("signal_timer_remaining_ms", timerRemainingAtStart)
+            .putLong("signal_timer_total_ms", timerTotalMs)
+            .putLong("signal_timer_anchor_elapsed", timerStartElapsed)
+            .apply()
+        sendBroadcast(Intent(ACTION_SIGNAL).setPackage(packageName))
         timerHandler.postDelayed(timerTicker, 1000L)
     }
 
