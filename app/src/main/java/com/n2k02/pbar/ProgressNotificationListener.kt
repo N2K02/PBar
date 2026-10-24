@@ -258,6 +258,10 @@ class ProgressNotificationListener : NotificationListenerService() {
                 .putInt("signal_progress", percent)
                 .putLong("signal_duration", duration)
                 .putLong("signal_position", estimatedPosition.coerceAtLeast(0L))
+                // Use the player's original position timestamp for frame-accurate overlay
+                // interpolation; the estimated position above is for Home diagnostics.
+                .putLong("signal_raw_position", position.coerceAtLeast(0L))
+                .putLong("signal_anchor_elapsed", state?.lastPositionUpdateTime?.takeIf { it > 0L } ?: 0L)
                 .putInt("signal_color", 0)
                 .putString("signal_package", playing.packageName)
                 .putString("signal_title", metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE) ?: playing.packageName)
@@ -265,7 +269,7 @@ class ProgressNotificationListener : NotificationListenerService() {
                 .putLong("signal_updated", System.currentTimeMillis())
                 .apply()
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
-            if (state?.state == PlaybackState.STATE_PLAYING) progressHandler.postDelayed(progressTicker, 500L)
+            if (state?.state == PlaybackState.STATE_PLAYING || state?.state == PlaybackState.STATE_FAST_FORWARDING || state?.state == PlaybackState.STATE_REWINDING) progressHandler.postDelayed(progressTicker, 1000L)
         } else {
             // A paused/finished media session must not keep the overlay visible.
             // Preserve genuinely active timer/download progress notifications only.
