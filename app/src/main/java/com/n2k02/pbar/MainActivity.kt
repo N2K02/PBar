@@ -30,6 +30,13 @@ import androidx.compose.material.icons.rounded.Home as HomeRounded
 import androidx.compose.material.icons.rounded.Palette as PaletteRounded
 import androidx.compose.material.icons.rounded.Tune as TuneRounded
 import androidx.compose.material.icons.rounded.SystemUpdate as SystemUpdateRounded
+import androidx.compose.material.icons.rounded.Settings as SettingsRounded
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,7 +50,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), UPDATES("Updates") }
+private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), SETTINGS("Settings") }
+private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("App updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,6 +130,25 @@ class MainActivity : ComponentActivity() {
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
+        var settingsPage by remember { mutableStateOf(SettingsPage.MAIN) }
+        // Refresh permission indicators when returning from Android Settings.
+        var permissionRevision by remember { mutableIntStateOf(0) }
+        DisposableEffect(this@MainActivity) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) permissionRevision++
+            }
+            lifecycle.addObserver(observer)
+            onDispose { lifecycle.removeObserver(observer) }
+        }
+        val overlayReady = remember(permissionRevision) { Settings.canDrawOverlays(this@MainActivity) }
+        val listenerReady = remember(permissionRevision) {
+            runCatching {
+                val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
+                enabled.split(':').any {
+                    it.equals(ComponentName(this@MainActivity, ProgressNotificationListener::class.java).flattenToString(), ignoreCase = true)
+                }
+            }.getOrDefault(false)
+        }
         val pbarIcon = remember { loadAppIcon(packageManager, packageName) }
         var showTrackingDetails by remember { mutableStateOf(false) }
         var overlayEnabled by remember { mutableStateOf(true) }
@@ -150,7 +177,11 @@ class MainActivity : ComponentActivity() {
         var selectedPackages by remember { mutableStateOf(setOf<String>()) }
         var selectedApp by remember { mutableStateOf<String?>(null) }
         BackHandler(enabled = selectedApp != null || tab != Tab.HOME) {
-            if (selectedApp != null) selectedApp = null else tab = Tab.HOME
+            when {
+                selectedApp != null -> selectedApp = null
+                tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN -> settingsPage = SettingsPage.MAIN
+                else -> tab = Tab.HOME
+            }
         }
         var installedAppsRevision by remember { mutableIntStateOf(0) }
         var installedApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
@@ -270,13 +301,13 @@ class MainActivity : ComponentActivity() {
                     TopAppBar(
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                if (selectedApp == null) {
+                                if (selectedApp == null && !(tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN)) {
                                     Icon(
                                         when (tab) {
                                             Tab.HOME -> Icons.Rounded.HomeRounded
                                             Tab.STYLE -> Icons.Rounded.PaletteRounded
                                             Tab.APPS -> Icons.Rounded.TuneRounded
-                                            Tab.UPDATES -> Icons.Rounded.SystemUpdateRounded
+                                            Tab.SETTINGS -> Icons.Rounded.SettingsRounded
                                         },
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
@@ -284,16 +315,18 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 Text(
-                                    if (selectedApp != null) "Customize app" else tab.label,
+                                    if (selectedApp != null) "Customize app" else if (tab == Tab.SETTINGS) settingsPage.title else tab.label,
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
                         },
                         navigationIcon = {
-                            if (selectedApp != null) {
-                                IconButton(onClick = { selectedApp = null }) {
-                                    Icon(Icons.Rounded.ArrowBack, contentDescription = "Back to apps")
+                            if (selectedApp != null || (tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN)) {
+                                IconButton(onClick = {
+                                    if (selectedApp != null) selectedApp = null else settingsPage = SettingsPage.MAIN
+                                }) {
+                                    Icon(Icons.Rounded.ArrowBack, contentDescription = if (selectedApp != null) "Back to apps" else "Back to Settings")
                                 }
                             }
                         },
@@ -316,7 +349,7 @@ class MainActivity : ComponentActivity() {
                         NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.HomeRounded, null) }, label = { Text("Home") })
                         NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Rounded.PaletteRounded, null) }, label = { Text("Appearance") })
                         NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Rounded.TuneRounded, null) }, label = { Text("Apps") })
-                        NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { selectedApp = null; tab = Tab.UPDATES }, icon = { Icon(Icons.Rounded.SystemUpdateRounded, null) }, label = { Text("Updates") })
+                        NavigationBarItem(selected = tab == Tab.SETTINGS, onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS }, icon = { Icon(Icons.Rounded.SettingsRounded, null) }, label = { Text("Settings") })
                     }
                 }
             ) { padding ->
@@ -328,42 +361,21 @@ class MainActivity : ComponentActivity() {
                 ) {
                     when (tab) {
                         Tab.HOME -> {
-                            val overlayReady = Settings.canDrawOverlays(this@MainActivity)
-                            val listenerReady = runCatching {
-                                val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
-                                enabled.split(':').any { it.equals(ComponentName(this@MainActivity, ProgressNotificationListener::class.java).flattenToString(), ignoreCase = true) }
-                            }.getOrDefault(false)
-                            Text("PBar runs automatically", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            Text("Shows media and download progress over other apps.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Palette, contentDescription = null, tint = if (overlayReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-                                        Spacer(Modifier.width(12.dp))
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Display over other apps", style = MaterialTheme.typography.titleMedium)
-                                            Text(if (overlayReady) "Ready" else "Permission needed", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                    if (!overlayReady) {
-                                        Button(onClick = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
-                                            Text("Allow display over apps")
-                                        }
-                                    }
-                                    HorizontalDivider()
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Tune, contentDescription = null, tint = if (listenerReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-                                        Spacer(Modifier.width(12.dp))
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Notification access", style = MaterialTheme.typography.titleMedium)
-                                            Text(if (listenerReady) "Ready" else "Permission needed", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                    if (!listenerReady) {
-                                        Button(onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
-                                            Text("Allow notification access")
-                                        }
-                                    }
+                            Text(
+                                if (overlayReady && listenerReady) "PBar runs automatically" else "Finish setting up PBar",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Shows media and download progress over other apps.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (!overlayReady || !listenerReady) {
+                                FilledTonalButton(
+                                    onClick = { settingsPage = SettingsPage.PERMISSIONS; tab = Tab.SETTINGS },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shapes = ButtonDefaults.shapes()
+                                ) {
+                                    Icon(Icons.Rounded.Security, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Set up permissions")
                                 }
                             }
                             ElevatedCard(Modifier.fillMaxWidth()) {
@@ -411,11 +423,15 @@ class MainActivity : ComponentActivity() {
                                         }
                                 }
                             }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { tab = Tab.STYLE }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Appearance") }
-                                OutlinedButton(onClick = { tab = Tab.APPS }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Apps") }
+                            FilledTonalButton(
+                                onClick = { quitPBar() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shapes = ButtonDefaults.shapes()
+                            ) {
+                                Icon(Icons.Rounded.PowerSettingsNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Quit PBar")
                             }
-                            TextButton(onClick = { quitPBar() }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Quit PBar") }
                         }
                         Tab.STYLE -> {
                             ElevatedCard(Modifier.fillMaxWidth()) {
@@ -831,8 +847,66 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
-                        Tab.UPDATES -> {
-                            UpdatesPage()
+                        Tab.SETTINGS -> {
+                            when (settingsPage) {
+                                SettingsPage.MAIN -> {
+                                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                                        ListItem(
+                                            headlineContent = { Text("Permissions") },
+                                            supportingContent = {
+                                                Text(if (overlayReady && listenerReady) "All permissions granted" else "Permissions needed")
+                                            },
+                                            leadingContent = { Icon(Icons.Rounded.Security, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable { settingsPage = SettingsPage.PERMISSIONS }
+                                        )
+                                        HorizontalDivider()
+                                        ListItem(
+                                            headlineContent = { Text("App updates") },
+                                            supportingContent = { Text("Version ${BuildConfig.VERSION_NAME} · update options") },
+                                            leadingContent = { Icon(Icons.Rounded.SystemUpdateRounded, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable { settingsPage = SettingsPage.APP_UPDATES }
+                                        )
+                                    }
+                                }
+                                SettingsPage.PERMISSIONS -> {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        ListItem(
+                                            headlineContent = { Text("Display over other apps") },
+                                            supportingContent = {
+                                                Text(if (overlayReady) "Permission granted" else "Needed to display the progress bar")
+                                            },
+                                            leadingContent = { Icon(Icons.Rounded.Security, contentDescription = null) }
+                                        )
+                                        FilledTonalButton(
+                                            onClick = {
+                                                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shapes = ButtonDefaults.shapes()
+                                        ) {
+                                            Text(if (overlayReady) "Manage display permission" else "Allow display over apps")
+                                        }
+                                        HorizontalDivider()
+                                        ListItem(
+                                            headlineContent = { Text("Notification access") },
+                                            supportingContent = {
+                                                Text(if (listenerReady) "Permission granted" else "Needed to detect media and downloads")
+                                            },
+                                            leadingContent = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) }
+                                        )
+                                        FilledTonalButton(
+                                            onClick = { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shapes = ButtonDefaults.shapes()
+                                        ) {
+                                            Text(if (listenerReady) "Manage notification access" else "Allow notification access")
+                                        }
+                                    }
+                                }
+                                SettingsPage.APP_UPDATES -> UpdatesPage()
+                            }
                         }
                     }
                 }
