@@ -6,8 +6,6 @@ import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
@@ -325,8 +323,8 @@ class MainActivity : ComponentActivity() {
                 Column(
                     Modifier.fillMaxSize().padding(padding)
                         .then(if (tab == Tab.APPS && selectedApp == null) Modifier else Modifier.verticalScroll(rememberScrollState()))
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     when (tab) {
                         Tab.HOME -> {
@@ -338,7 +336,7 @@ class MainActivity : ComponentActivity() {
                             Text("PBar runs automatically", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             Text("Shows media and download progress over other apps.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Palette, contentDescription = null, tint = if (overlayReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                                         Spacer(Modifier.width(12.dp))
@@ -369,7 +367,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Live status", style = MaterialTheme.typography.titleLarge)
                                     Text(
                                         when {
@@ -382,35 +380,35 @@ class MainActivity : ComponentActivity() {
                                         },
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    if (showTrackingDetails) {
-                                        if (signalPackage.isNotBlank()) {
-                                        Text("Source: " + signalPackage, style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    if (signalMedia && signalDuration > 0L) {
-                                        Text("Position: " + (signalPosition / 1000L) + "s / " + (signalDuration / 1000L) + "s", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    HorizontalDivider()
-                                    Text("Media-session diagnostics", style = MaterialTheme.typography.titleMedium)
-                                    Text("Listener: " + if (diagnosticListenerConnected) "connected" else "not currently connected", style = MaterialTheme.typography.bodySmall)
-                                    Text("Active sessions reported by Android: " + diagnosticSessionCount, style = MaterialTheme.typography.bodySmall)
-                                    Text(diagnosticSessionSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (diagnosticNotificationSummary.isNotBlank()) {
-                                        Text("Notifications PBar can see:", style = MaterialTheme.typography.bodySmall)
-                                        Text(diagnosticNotificationSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    if (diagnosticSessionError.isNotBlank()) {
-                                        Text("Session error: " + diagnosticSessionError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                    }
-                                    if (signalUpdated > 0L) {
-                                        Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         TextButton(onClick = { recheckSignalStatus() }) { Text("Refresh") }
                                         TextButton(onClick = { showTrackingDetails = !showTrackingDetails }) {
                                             Text(if (showTrackingDetails) "Hide details" else "Details")
                                         }
                                     }
+                                    if (showTrackingDetails) {
+                                            if (signalPackage.isNotBlank()) {
+                                            Text("Source: " + signalPackage, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        if (signalMedia && signalDuration > 0L) {
+                                            Text("Position: " + (signalPosition / 1000L) + "s / " + (signalDuration / 1000L) + "s", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        HorizontalDivider()
+                                        Text("Media-session diagnostics", style = MaterialTheme.typography.titleMedium)
+                                        Text("Listener: " + if (diagnosticListenerConnected) "connected" else "not currently connected", style = MaterialTheme.typography.bodySmall)
+                                        Text("Active sessions reported by Android: " + diagnosticSessionCount, style = MaterialTheme.typography.bodySmall)
+                                        Text(diagnosticSessionSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (diagnosticNotificationSummary.isNotBlank()) {
+                                            Text("Notifications PBar can see:", style = MaterialTheme.typography.bodySmall)
+                                            Text(diagnosticNotificationSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        if (diagnosticSessionError.isNotBlank()) {
+                                            Text("Session error: " + diagnosticSessionError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                        }
+                                        if (signalUpdated > 0L) {
+                                            Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        }
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -713,7 +711,7 @@ class MainActivity : ComponentActivity() {
                                                         var colorMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                         val currentColorName = appColorOptions.firstOrNull { it.second == appColorOverrides[packageName] }?.first ?: if (appColorOverrides[packageName].isNullOrBlank()) "Automatic" else "Custom"
                                                         TextButton(onClick = { colorMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text("Colour: $currentColorName") }
-                                                        DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
+                                                        DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
                                                             appColorOptions.forEach { (optionName, hex) ->
                                                                 DropdownMenuItem(text = { Text(optionName) }, leadingIcon = { Icon(Icons.Rounded.Palette, null) }, onClick = {
                                                                     val updated = appColorOverrides.toMutableMap()
@@ -753,7 +751,7 @@ class MainActivity : ComponentActivity() {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Style", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { styleMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(when (appStyle) { "line" -> "Line"; else -> "Default" }) }
-                                                            DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
+                                                            DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
                                                                 listOf("default" to "Default", "line" to "Line").forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Rounded.Tune, null) }, onClick = {
                                                                         appStyle = value
@@ -769,7 +767,7 @@ class MainActivity : ComponentActivity() {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Orientation", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { orientationMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
+                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }) {
                                                                 listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = {
                                                                         appOrientation = value
@@ -785,7 +783,7 @@ class MainActivity : ComponentActivity() {
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Text("Position", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { positionMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
+                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
                                                                 (if ((appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
                                                                     listOf("default" to "Default", "top" to "Top", "bottom" to "Bottom")
                                                                 } else {
