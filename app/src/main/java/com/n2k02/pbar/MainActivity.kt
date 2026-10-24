@@ -27,6 +27,11 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -119,6 +124,7 @@ class MainActivity : ComponentActivity() {
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
+        val pbarIcon = remember { loadAppIcon(packageManager, packageName) }
         var showTrackingDetails by remember { mutableStateOf(false) }
         var overlayEnabled by remember { mutableStateOf(true) }
         var style by remember { mutableStateOf("line") }
@@ -264,15 +270,55 @@ class MainActivity : ComponentActivity() {
                 contentWindowInsets = WindowInsets.safeDrawing,
                 topBar = {
                     TopAppBar(
-                        title = { Column { Text(if (selectedApp != null) "Customize app" else "PBar", fontWeight = FontWeight.Bold); Text(if (selectedApp != null) "Apps / Appearance" else tab.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (selectedApp == null) {
+                                    Icon(
+                                        when (tab) {
+                                            Tab.HOME -> Icons.Rounded.Home
+                                            Tab.STYLE -> Icons.Rounded.Palette
+                                            Tab.APPS -> Icons.Rounded.Tune
+                                            Tab.UPDATES -> Icons.Rounded.SystemUpdate
+                                        },
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Text(
+                                    if (selectedApp != null) "Customize app" else tab.label,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            if (selectedApp != null) {
+                                IconButton(onClick = { selectedApp = null }) {
+                                    Icon(Icons.Rounded.ArrowBack, contentDescription = "Back to apps")
+                                }
+                            }
+                        },
+                        actions = {
+                            Row(
+                                modifier = Modifier.padding(end = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (pbarIcon != null) {
+                                    Image(bitmap = pbarIcon, contentDescription = null, modifier = Modifier.size(26.dp))
+                                }
+                                Text("PBar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     )
                 },
                 bottomBar = {
                     NavigationBar {
-                        NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Home") })
-                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Default.Palette, null) }, label = { Text("Appearance") })
-                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Default.Tune, null) }, label = { Text("Apps") })
-                        NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { selectedApp = null; tab = Tab.UPDATES }, icon = { Icon(Icons.Default.SystemUpdate, null) }, label = { Text("Updates") })
+                        NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.Home, null) }, label = { Text("Home") })
+                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Rounded.Palette, null) }, label = { Text("Appearance") })
+                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Rounded.Tune, null) }, label = { Text("Apps") })
+                        NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { selectedApp = null; tab = Tab.UPDATES }, icon = { Icon(Icons.Rounded.SystemUpdate, null) }, label = { Text("Updates") })
                     }
                 }
             ) { padding ->
@@ -289,7 +335,7 @@ class MainActivity : ComponentActivity() {
                                 val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
                                 enabled.split(':').any { it.equals(ComponentName(this@MainActivity, ProgressNotificationListener::class.java).flattenToString(), ignoreCase = true) }
                             }.getOrDefault(false)
-                            Text("PBar runs automatically", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text("PBar runs automatically", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             Text("Shows media and download progress over other apps.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -332,7 +378,7 @@ class MainActivity : ComponentActivity() {
                                             signalMedia && signalDuration > 0L -> "Media · " + (if (signalPlaying) "Playing" else "Paused") + " · " + signalProgress + "%"
                                             signalMedia -> "Media · timing unavailable"
                                             signalIndeterminate -> "Tracking progress"
-                                            else -> "Progress · " + signalProgress + "%."
+                                            else -> "Progress · " + signalProgress + "%"
                                         },
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -367,28 +413,13 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Customize", style = MaterialTheme.typography.titleLarge)
-                                    Text("Adjust the bar or choose apps to track.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(onClick = { tab = Tab.STYLE }, shapes = ButtonDefaults.shapes()) { Text("Appearance") }
-                                        Button(onClick = { tab = Tab.APPS }, shapes = ButtonDefaults.shapes()) { Text("Apps") }
-                                    }
-                                }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { tab = Tab.STYLE }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Appearance") }
+                                OutlinedButton(onClick = { tab = Tab.APPS }, modifier = Modifier.weight(1f), shapes = ButtonDefaults.shapes()) { Text("Apps") }
                             }
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Quit PBar", style = MaterialTheme.typography.titleLarge)
-                                    Text("Stops tracking until you reopen PBar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Button(onClick = { quitPBar() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
-                                        Text("Quit PBar")
-                                    }
-                                }
-                            }
+                            TextButton(onClick = { quitPBar() }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Quit PBar") }
                         }
                         Tab.STYLE -> {
-                            Text("Choose your indicator", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Progress bar", style = MaterialTheme.typography.titleMedium)
@@ -541,7 +572,6 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     item {
                                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Text("Your apps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                                             Text("Choose apps to track. Tap one to customize.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Button(onClick = {
                                                 knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
@@ -554,15 +584,10 @@ class MainActivity : ComponentActivity() {
                                             }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Refresh list") }
 
                                             if (appsLoaded) {
-                                                ElevatedCard(Modifier.fillMaxWidth()) {
-                                                    Column(Modifier.padding(16.dp)) {
-                                                        Text("${installedApps.count { it.first !in ignoredPackages }} enabled", style = MaterialTheme.typography.titleLarge)
-                                                        Text("${installedApps.size} installed or detected apps", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    }
-                                                }
+                                                Text("${installedApps.count { it.first !in ignoredPackages }} of ${installedApps.size} apps enabled", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             OutlinedTextField(value = appsSearch, onValueChange = { appsSearch = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 listOf("All", "Enabled", "Disabled", "Detected").forEach { option ->
                                                     FilterChip(selected = appsFilter == option, onClick = { appsFilter = option }, label = { Text(option) })
                                                 }
@@ -690,7 +715,7 @@ class MainActivity : ComponentActivity() {
                                                         TextButton(onClick = { colorMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text("Colour: $currentColorName") }
                                                         DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
                                                             appColorOptions.forEach { (optionName, hex) ->
-                                                                DropdownMenuItem(text = { Text(optionName) }, leadingIcon = { Icon(Icons.Default.Palette, null) }, onClick = {
+                                                                DropdownMenuItem(text = { Text(optionName) }, leadingIcon = { Icon(Icons.Rounded.Palette, null) }, onClick = {
                                                                     val updated = appColorOverrides.toMutableMap()
                                                                     if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
                                                                     appCustomHex = hex
@@ -730,7 +755,7 @@ class MainActivity : ComponentActivity() {
                                                             TextButton(onClick = { styleMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(when (appStyle) { "line" -> "Line"; else -> "Default" }) }
                                                             DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }, modifier = Modifier.clip(RoundedCornerShape(22.dp))) {
                                                                 listOf("default" to "Default", "line" to "Line").forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Tune, null) }, onClick = {
+                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Rounded.Tune, null) }, onClick = {
                                                                         appStyle = value
                                                                         val edit = prefs.edit()
                                                                         if (value == "default") edit.remove("app_${packageName}_style") else edit.putString("app_${packageName}_style", value)
