@@ -158,6 +158,7 @@ class OverlayController(private val host: Context) {
         private var indeterminate = false
         private var media = false
         private var signal = false
+        private var sourcePackage = ""
         private var primaryColor = Color.rgb(103, 80, 164)
         private var opacity = 255
         private var rounded = true
@@ -195,6 +196,7 @@ class OverlayController(private val host: Context) {
                 if (context.theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data
                 else Color.rgb(103, 80, 164)
             } else Color.rgb(103, 80, 164)
+            sourcePackage = nextPackage
             val sourceColor = prefs.getInt("signal_color", 0)
             val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
                 .firstOrNull { it.startsWith("$nextPackage=") }
