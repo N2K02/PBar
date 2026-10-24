@@ -188,6 +188,7 @@ class OverlayController(private val host: Context) {
         private var primaryColor = Color.rgb(103, 80, 164)
         private var opacity = 255
         private var rounded = true
+        private var emphasiseProgress = true
 
         fun updateFrom(prefs: SharedPreferences) {
             val nextPackage = if (demoActive()) "" else prefs.getString("signal_package", "").orEmpty()
@@ -251,6 +252,7 @@ class OverlayController(private val host: Context) {
                 else customColor ?: fallbackColor
             opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
             rounded = prefs.getBoolean("rounded_corners", true)
+            emphasiseProgress = prefs.getBoolean("emphasise_progress", true)
             invalidate()
         }
 
@@ -282,7 +284,8 @@ class OverlayController(private val host: Context) {
             super.onDraw(canvas)
             val displayProgress = currentProgress()
             paint.style = Paint.Style.FILL
-            paint.color = Color.argb(opacity * 80 / 255, 150, 150, 150)
+            // Keep the inactive track subtle so the coloured, played portion stands out.
+            paint.color = Color.argb(opacity * (if (emphasiseProgress) 40 else 80) / 255, 150, 150, 150)
             if (rounded) canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), height / 2f, height / 2f, paint)
             else canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
             if (signal) {
@@ -297,6 +300,22 @@ class OverlayController(private val host: Context) {
                     val start = if (indeterminate) ((SystemClock.uptimeMillis() % 1400L) / 1400f) * (width - segment) else 0f
                     if (rounded) canvas.drawRoundRect(start, 0f, start + segment, height.toFloat(), height / 2f, height / 2f, paint)
                     else canvas.drawRect(start, 0f, start + segment, height.toFloat(), paint)
+                }
+                // Small neutral tip clearly marks the current playback position.
+                // It stays within the existing overlay bounds and respects opacity.
+                if (emphasiseProgress && !indeterminate && displayProgress > 0f && displayProgress < 100f) {
+                    paint.color = Color.argb(opacity, 255, 255, 255)
+                    if (width < height) {
+                        val end = height * (1f - displayProgress / 100f)
+                        val markerHeight = dp(2).toFloat().coerceAtMost(height.toFloat())
+                        canvas.drawRect(0f, end, width.toFloat(),
+                            (end + markerHeight).coerceAtMost(height.toFloat()), paint)
+                    } else {
+                        val end = width * displayProgress / 100f
+                        val markerWidth = dp(2).toFloat().coerceAtMost(width.toFloat())
+                        canvas.drawRect((end - markerWidth).coerceAtLeast(0f), 0f,
+                            end, height.toFloat(), paint)
+                    }
                 }
             }
             if (demoStartedAt > 0L && !demoActive()) {
