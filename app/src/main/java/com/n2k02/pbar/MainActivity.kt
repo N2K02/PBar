@@ -6,7 +6,6 @@ import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
-import android.os.Build
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import android.provider.Settings
@@ -14,7 +13,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -30,11 +28,6 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MaterialExpressiveTheme
-import androidx.compose.material3.MotionScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.n2k02.theme.N2K02Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -118,7 +112,7 @@ class MainActivity : ComponentActivity() {
         finishAndRemoveTask()
     }
 
-    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     @Composable
     private fun PBarApp() {
         val context = LocalContext.current
@@ -264,14 +258,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val dark = isSystemInDarkTheme()
-        val scheme = when {
-            Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(context)
-            Build.VERSION.SDK_INT >= 31 -> dynamicLightColorScheme(context)
-            dark -> darkColorScheme()
-            else -> lightColorScheme()
-        }
-        MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.expressive()) {
+        N2K02Theme {
             Scaffold(
                 contentWindowInsets = WindowInsets.safeDrawing,
                 topBar = {
