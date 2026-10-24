@@ -154,25 +154,45 @@ class OverlayController(private val host: Context) {
         private var sourcePackage = ""
 
         fun updateFrom(prefs: SharedPreferences) {
+            val nextPackage = prefs.getString("signal_package", "").orEmpty()
+            val nextMedia = prefs.getBoolean("signal_media", false)
+            val nextPosition = prefs.getLong(
+                "signal_raw_position", prefs.getLong("signal_position", 0L)
+            ).coerceAtLeast(0L)
+            val nextDuration = prefs.getLong("signal_duration", 0L).coerceAtLeast(0L)
+            val nextPlaying = prefs.getBoolean("signal_playing", false)
+            val nextSpeed = prefs.getFloat("signal_speed", 1f).coerceIn(-4f, 4f)
+            val playerAnchor = prefs.getLong("signal_anchor_elapsed", 0L)
+            // If Android provides no timestamp, keep our previous anchor while its
+            // reported position is unchanged. Re-anchoring on each notification caused
+            // the progress line to repeatedly stall or jump backward.
+            if (nextMedia && playerAnchor > 0L) {
+                mediaAnchorElapsed = playerAnchor
+            } else if (nextPackage != sourcePackage || nextMedia != media ||
+                nextPosition != mediaPositionMs || nextDuration != mediaDurationMs ||
+                nextPlaying != mediaPlaying || nextSpeed != mediaSpeed) {
+                mediaAnchorElapsed = SystemClock.elapsedRealtime()
+            }
             progress = prefs.getInt("signal_progress", 0).coerceIn(0, 100)
-            mediaPositionMs = prefs.getLong("signal_position", 0L).coerceAtLeast(0L)
-            mediaDurationMs = prefs.getLong("signal_duration", 0L).coerceAtLeast(0L)
-            mediaPlaying = prefs.getBoolean("signal_playing", false)
-            mediaSpeed = prefs.getFloat("signal_speed", 1f).coerceIn(0.1f, 4f)
-            mediaAnchorElapsed = SystemClock.elapsedRealtime()
+            mediaPositionMs = nextPosition
+            mediaDurationMs = nextDuration
+            mediaPlaying = nextPlaying
+            mediaSpeed = nextSpeed
             indeterminate = prefs.getBoolean("signal_indeterminate", false)
-            media = prefs.getBoolean("signal_media", false)
+            media = nextMedia
             signal = prefs.getBoolean("has_signal", false)
             sourceColor = prefs.getInt("signal_color", 0)
-            sourcePackage = prefs.getString("signal_package", "").orEmpty()
+            sourcePackage = nextPackage
             invalidate()
         }
 
-        private fun currentProgress(): Int {
-            if (!media || mediaDurationMs <= 0L) return progress
+        private fun currentProgress(): Float {
+            if (!media || mediaDurationMs <= 0L) return progress.toFloat()
             val elapsed = if (mediaPlaying) (SystemClock.elapsedRealtime() - mediaAnchorElapsed).coerceAtLeast(0L) else 0L
             val estimated = mediaPositionMs + (elapsed * mediaSpeed).toLong()
-            return ((estimated.coerceIn(0L, mediaDurationMs) * 100L) / mediaDurationMs).toInt()
+            // Preserve fractional percentages: integer rounding made a typical song
+            // advance in visible 1% jumps even though the view redrew each frame.
+            return estimated.coerceIn(0L, mediaDurationMs).toFloat() * 100f / mediaDurationMs
         }
 
         override fun onDraw(canvas: Canvas) {
@@ -214,8 +234,7 @@ class OverlayController(private val host: Context) {
                     else canvas.drawRect(start, 0f, start + segment, height.toFloat(), paint)
                 }
             }
-            if (signal && indeterminate) postInvalidateDelayed(32L)
-            else if (signal && media && mediaPlaying && mediaDurationMs > 0L) postInvalidateDelayed(16L)
+            if (signal && (indeterminate || (media && mediaPlaying && mediaDurationMs > 0L))) postInvalidateOnAnimation()
         }
     }
 
