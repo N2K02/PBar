@@ -775,29 +775,28 @@ class MainActivity : ComponentActivity() {
                                                 Text("${installedApps.count { it.first !in ignoredPackages }} of ${installedApps.size} apps enabled", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             OutlinedTextField(value = appsSearch, onValueChange = { appsSearch = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                            // A stable two-column layout gives all four filters equal
-                                            // breathing room instead of squeezing or unevenly wrapping chips.
-                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                listOf("All", "Enabled", "Disabled", "Detected")
-                                                    .chunked(2).forEach { rowOptions ->
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                                        ) {
-                                                            rowOptions.forEach { option ->
-                                                                FilterChip(
-                                                                    selected = appsFilter == option,
-                                                                    onClick = { appsFilter = option },
-                                                                    modifier = Modifier.weight(1f),
-                                                                    label = {
-                                                                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                                                            Text(option)
-                                                                        }
-                                                                    }
+                                            // Keep all four filters visible in a single, balanced row.
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                listOf("All", "Enabled", "Disabled", "Detected").forEach { option ->
+                                                    FilterChip(
+                                                        selected = appsFilter == option,
+                                                        onClick = { appsFilter = option },
+                                                        modifier = Modifier.weight(1f),
+                                                        label = {
+                                                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                                                Text(
+                                                                    option,
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    maxLines = 1,
+                                                                    softWrap = false
                                                                 )
                                                             }
                                                         }
-                                                    }
+                                                    )
+                                                }
                                             }
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 TextButton(onClick = { multiSelectApps = !multiSelectApps; selectedPackages = emptySet() }) { Text(if (multiSelectApps) "Done" else "Select multiple") }
