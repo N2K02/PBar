@@ -32,6 +32,9 @@ class OverlayController(private val host: Context) {
     private var overlay: IndicatorView? = null
     private var fullscreen = false
     private var receiverRegistered = false
+    private var demoStartedAt = 0L
+    private fun demoActive() = demoStartedAt > 0L &&
+        SystemClock.elapsedRealtime() - demoStartedAt < TEST_DURATION_MS
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -39,6 +42,7 @@ class OverlayController(private val host: Context) {
                 PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED ->
                     fullscreen = intent.getBooleanExtra(PBarAccessibilityService.EXTRA_FULLSCREEN, false)
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF, Intent.ACTION_USER_PRESENT -> fullscreen = false
+                ACTION_TEST_PROGRESS -> demoStartedAt = SystemClock.elapsedRealtime()
             }
             render()
         }
@@ -49,6 +53,7 @@ class OverlayController(private val host: Context) {
         if (!receiverRegistered) {
             val filter = IntentFilter().apply {
                 addAction(ProgressNotificationListener.ACTION_SIGNAL)
+                addAction(ACTION_TEST_PROGRESS)
                 addAction(PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED)
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
@@ -67,6 +72,7 @@ class OverlayController(private val host: Context) {
             runCatching { host.unregisterReceiver(receiver) }
             receiverRegistered = false
         }
+        demoStartedAt = 0L
         removeOverlay()
     }
 
@@ -75,13 +81,15 @@ class OverlayController(private val host: Context) {
         val prefs = host.getSharedPreferences("pbar", Context.MODE_PRIVATE)
         val keyguard = host.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         val locked = keyguard.isKeyguardLocked
-        if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false) ||
+        if (!prefs.getBoolean("overlay_enabled", false) ||
+            (!prefs.getBoolean("has_signal", false) && !demoActive()) ||
             (prefs.getBoolean("hide_fullscreen", false) && fullscreen) ||
             (locked && !prefs.getBoolean("show_on_lock_screen", false))) {
             removeOverlay()
             return
         }
-        val sourcePackage = prefs.getString("signal_package", "").orEmpty()
+        // Demo deliberately uses the global style, not an app-specific override.
+        val sourcePackage = if (demoActive()) "" else prefs.getString("signal_package", "").orEmpty()
         val vertical = prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
         val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
@@ -160,6 +168,12 @@ class OverlayController(private val host: Context) {
         private var signal = false
         private var sourcePackage = ""
         private var mediaTitle = ""
+        private var timerActive = false
+        private var timerRemainingMs = 0L
+        private var timerDurationMs = 0L
+        private var timerAnchorElapsed = 0L
+        private var positionCorrectionMs = 0f
+        private var correctionAnchorElapsed = 0L
         private var primaryColor = Color.rgb(103, 80, 164)
         private var opacity = 255
         private var rounded = true
@@ -175,24 +189,38 @@ class OverlayController(private val host: Context) {
             val nextPlaying = prefs.getBoolean("signal_playing", false)
             val nextSpeed = prefs.getFloat("signal_speed", 1f).coerceIn(-4f, 4f)
             val playerAnchor = prefs.getLong("signal_anchor_elapsed", 0L)
-            // If Android provides no timestamp, keep our previous anchor while its
-            // reported position is unchanged. Re-anchoring on each notification caused
-            // the progress line to repeatedly stall or jump backward.
-            if (nextMedia && playerAnchor > 0L) {
-                mediaAnchorElapsed = playerAnchor
-            } else if (nextPackage != sourcePackage || nextTitle != mediaTitle || nextMedia != media ||
-                nextPosition != mediaPositionMs || nextDuration != mediaDurationMs ||
-                nextPlaying != mediaPlaying || nextSpeed != mediaSpeed) {
-                mediaAnchorElapsed = SystemClock.elapsedRealtime()
-            }
+            val now = SystemClock.elapsedRealtime()
+            val previousPosition = interpolatedMediaPosition(now)
+            // Android playback timestamps are expressed in elapsed-realtime milliseconds.
+            // Preserve the clock between reports and only fall back to our own when absent.
+            val nextAnchor = if (nextMedia && playerAnchor in 1L..now) playerAnchor
+                else if (nextPackage != sourcePackage || nextTitle != mediaTitle || nextMedia != media ||
+                    nextPosition != mediaPositionMs || nextDuration != mediaDurationMs ||
+                    nextPlaying != mediaPlaying || nextSpeed != mediaSpeed) now
+                else mediaAnchorElapsed
+            // Tiny player corrections should ease into place; real seeks or track changes
+            // must snap immediately to the new position (no misleading slow catch-up).
+            val newPosition = (nextPosition +
+                (if (nextPlaying) (now - nextAnchor).coerceAtLeast(0L) * nextSpeed else 0f))
+                .coerceIn(0f, nextDuration.toFloat())
+            val continuous = nextMedia && media && nextPlaying && mediaPlaying &&
+                nextPackage == sourcePackage && nextTitle == mediaTitle && nextDuration == mediaDurationMs
+            val delta = previousPosition - newPosition
+            positionCorrectionMs = if (continuous && kotlin.math.abs(delta) <= 1500f) delta else 0f
+            correctionAnchorElapsed = now
+            mediaAnchorElapsed = nextAnchor
             progress = prefs.getInt("signal_progress", 0).coerceIn(0, 100)
             mediaPositionMs = nextPosition
             mediaDurationMs = nextDuration
             mediaPlaying = nextPlaying
             mediaSpeed = nextSpeed
+            timerActive = prefs.getBoolean("signal_timer", false)
+            timerRemainingMs = prefs.getLong("signal_timer_remaining_ms", 0L).coerceAtLeast(0L)
+            timerDurationMs = prefs.getLong("signal_timer_total_ms", 0L).coerceAtLeast(0L)
+            timerAnchorElapsed = prefs.getLong("signal_timer_anchor_elapsed", 0L)
             indeterminate = prefs.getBoolean("signal_indeterminate", false)
             media = nextMedia
-            signal = prefs.getBoolean("has_signal", false)
+            signal = demoActive() || prefs.getBoolean("has_signal", false)
             val fallbackColor = if (Build.VERSION.SDK_INT >= 31) {
                 val typed = TypedValue()
                 if (context.theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data
@@ -215,13 +243,28 @@ class OverlayController(private val host: Context) {
             invalidate()
         }
 
+        private fun interpolatedMediaPosition(now: Long): Float {
+            if (!media || mediaDurationMs <= 0L) return 0f
+            val elapsed = if (mediaPlaying) (now - mediaAnchorElapsed).coerceAtLeast(0L) else 0L
+            val raw = mediaPositionMs + elapsed * mediaSpeed
+            val remainingCorrection = if (mediaPlaying)
+                positionCorrectionMs * (1f - (now - correctionAnchorElapsed).coerceAtLeast(0L) / 650f)
+                    .coerceIn(0f, 1f)
+            else 0f
+            return (raw + remainingCorrection).coerceIn(0f, mediaDurationMs.toFloat())
+        }
+
         private fun currentProgress(): Float {
-            if (!media || mediaDurationMs <= 0L) return progress.toFloat()
-            val elapsed = if (mediaPlaying) (SystemClock.elapsedRealtime() - mediaAnchorElapsed).coerceAtLeast(0L) else 0L
-            val estimated = mediaPositionMs + (elapsed * mediaSpeed).toLong()
-            // Preserve fractional percentages: integer rounding made a typical song
-            // advance in visible 1% jumps even though the view redrew each frame.
-            return estimated.coerceIn(0L, mediaDurationMs).toFloat() * 100f / mediaDurationMs
+            val now = SystemClock.elapsedRealtime()
+            if (demoActive()) return ((now - demoStartedAt) * 100f / TEST_DURATION_MS).coerceIn(0f, 100f)
+            if (timerActive && timerDurationMs > 0L && timerAnchorElapsed > 0L) {
+                val remaining = (timerRemainingMs - (now - timerAnchorElapsed).coerceAtLeast(0L))
+                    .coerceIn(0L, timerDurationMs)
+                return 100f * (timerDurationMs - remaining).toFloat() / timerDurationMs
+            }
+            if (media && mediaDurationMs > 0L)
+                return interpolatedMediaPosition(now) * 100f / mediaDurationMs
+            return progress.toFloat()
         }
 
         override fun onDraw(canvas: Canvas) {
@@ -245,9 +288,19 @@ class OverlayController(private val host: Context) {
                     else canvas.drawRect(start, 0f, start + segment, height.toFloat(), paint)
                 }
             }
-            if (signal && (indeterminate || (media && mediaPlaying && mediaDurationMs > 0L))) postInvalidateOnAnimation()
+            if (demoStartedAt > 0L && !demoActive()) {
+                // The preview never modifies real signals; resume the original overlay state.
+                demoStartedAt = 0L
+                post { render() }
+            } else if (demoActive() || (signal && (indeterminate ||
+                (media && mediaPlaying && mediaDurationMs > 0L) ||
+                (timerActive && timerDurationMs > 0L)))) postInvalidateOnAnimation()
         }
     }
 
-    private companion object { const val TAG = "PBar" }
+    companion object {
+        const val ACTION_TEST_PROGRESS = "com.n2k02.pbar.TEST_PROGRESS"
+        const val TEST_DURATION_MS = 10_000L
+        private const val TAG = "PBar"
+    }
 }
