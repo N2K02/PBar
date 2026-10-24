@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -53,6 +54,7 @@ class OverlayController(private val host: Context) {
         if (!receiverRegistered) {
             val filter = IntentFilter().apply {
                 addAction(ProgressNotificationListener.ACTION_SIGNAL)
+                addAction(Intent.ACTION_CONFIGURATION_CHANGED)
                 addAction(ACTION_TEST_PROGRESS)
                 addAction(PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED)
                 addAction(Intent.ACTION_SCREEN_ON)
@@ -90,9 +92,18 @@ class OverlayController(private val host: Context) {
         }
         // Demo deliberately uses the global style, not an app-specific override.
         val sourcePackage = if (demoActive()) "" else prefs.getString("signal_package", "").orEmpty()
-        val vertical = prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
+        // The display itself determines line direction, never an app or user toggle.
+        val vertical = host.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
-        val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
+        val allowedPositions = if (vertical) setOf("left", "center", "right") else setOf("top", "bottom")
+        val defaultPosition = if (vertical) "left" else "top"
+        val suffix = if (vertical) "landscape" else "portrait"
+        val globalPosition = prefs.getString("position_$suffix", prefs.getString("position", defaultPosition))
+            .takeIf { it in allowedPositions } ?: defaultPosition
+        val appPosition = if (sourcePackage.isBlank()) globalPosition else
+            prefs.getString("app_${sourcePackage}_position_$suffix",
+                prefs.getString("app_${sourcePackage}_position", globalPosition))
+                .takeIf { it in allowedPositions } ?: globalPosition
         val params = WindowManager.LayoutParams(
             if (vertical) dp(thickness) else WindowManager.LayoutParams.MATCH_PARENT,
             if (vertical) WindowManager.LayoutParams.MATCH_PARENT else dp(thickness),
