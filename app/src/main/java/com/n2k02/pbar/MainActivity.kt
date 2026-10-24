@@ -11,6 +11,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -40,6 +43,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color as ComposeColor
+import android.os.SystemClock
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -153,12 +158,39 @@ class MainActivity : ComponentActivity() {
         var showTrackingDetails by remember { mutableStateOf(false) }
         var overlayEnabled by remember { mutableStateOf(true) }
         var style by remember { mutableStateOf("line") }
-        var position by remember { mutableStateOf(prefs.getString("position", "top") ?: "top") }
-        var orientation by remember { mutableStateOf(prefs.getString("orientation", "horizontal") ?: "horizontal") }
+        // Portrait always uses a horizontal line; landscape always uses a vertical one.
+        // Keep independent edge positions when the device rotates.
+        var portraitPosition by remember {
+            mutableStateOf(
+                (prefs.getString("position_portrait", prefs.getString("position", "top")) ?: "top")
+                    .takeIf { it == "top" || it == "bottom" } ?: "top"
+            )
+        }
+        var landscapePosition by remember {
+            mutableStateOf(
+                (prefs.getString("position_landscape", prefs.getString("position", "left")) ?: "left")
+                    .takeIf { it == "left" || it == "center" || it == "right" } ?: "left"
+            )
+        }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
         var appColor by remember { mutableStateOf(prefs.getBoolean("app_color", true)) }
         var customColorHex by remember { mutableStateOf(prefs.getString("indicator_custom_color", "") ?: "") }
         var customColorMessage by remember { mutableStateOf("") }
+        var pickerHue by remember { mutableFloatStateOf(265f) }
+        var pickerSaturation by remember { mutableFloatStateOf(0.7f) }
+        var pickerBrightness by remember { mutableFloatStateOf(0.95f) }
+        var previewTestKey by remember { mutableIntStateOf(0) }
+        var previewProgress by remember { mutableFloatStateOf(0.42f) }
+        LaunchedEffect(previewTestKey, tab) {
+            if (tab != Tab.STYLE || previewTestKey == 0) return@LaunchedEffect
+            val start = SystemClock.elapsedRealtime()
+            do {
+                previewProgress = ((SystemClock.elapsedRealtime() - start) / 10_000f).coerceIn(0f, 1f)
+                if (previewProgress >= 1f) break
+                withFrameNanos { }
+            } while (true)
+            previewProgress = 0.42f
+        }
         var hideFullscreen by remember { mutableStateOf(prefs.getBoolean("hide_fullscreen", false)) }
         var showOnLockScreen by remember { mutableStateOf(prefs.getBoolean("show_on_lock_screen", false)) }
         var showForDownloads by remember { mutableStateOf(prefs.getBoolean("show_for_downloads", true)) }
@@ -170,6 +202,7 @@ class MainActivity : ComponentActivity() {
         var ringStroke by remember { mutableIntStateOf(prefs.getInt("ring_stroke", 5).coerceIn(2, 10)) }
         var indicatorOpacity by remember { mutableIntStateOf(prefs.getInt("indicator_opacity", 100).coerceIn(20, 100)) }
         var roundedCorners by remember { mutableStateOf(prefs.getBoolean("rounded_corners", true)) }
+        var emphasiseProgress by remember { mutableStateOf(prefs.getBoolean("emphasise_progress", true)) }
         var knownPackages by remember { mutableStateOf(prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()) }
         var appsSearch by remember { mutableStateOf("") }
         var appsFilter by remember { mutableStateOf("All") }
@@ -436,14 +469,88 @@ class MainActivity : ComponentActivity() {
                         Tab.STYLE -> {
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("Progress bar", style = MaterialTheme.typography.titleMedium)
-                                    Text("Orientation", style = MaterialTheme.typography.titleMedium)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Horizontal") })
-                                        FilterChip(selected = orientation == "vertical", onClick = { orientation = "vertical"; if (position !in listOf("left", "center", "right")) position = "left"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Vertical") })
+                                    Text("Live preview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("See the global bar style immediately. Apps may apply their own overrides.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    val previewColour = runCatching {
+                                        ComposeColor(android.graphics.Color.parseColor(customColorHex))
+                                    }.getOrNull() ?: MaterialTheme.colorScheme.primary
+                                    ProgressLinePreview(if (landscape) "vertical" else "horizontal",
+                                        if (landscape) landscapePosition else portraitPosition, thickness, previewColour,
+                                        indicatorOpacity, roundedCorners, emphasiseProgress, previewProgress)
+                                    FilledTonalButton(
+                                        onClick = {
+                                            previewTestKey++
+                                            if (overlayReady && listenerReady) {
+                                                sendBroadcast(Intent(OverlayController.ACTION_TEST_PROGRESS)
+                                                    .setPackage(this@MainActivity.packageName))
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shapes = ButtonDefaults.shapes()
+                                    ) { Text("Test progress for 10 seconds") }
+                                    Text("The button also tests the actual overlay when display and notification permissions are enabled. Active playback settings are not modified.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Layout & position", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Choose where the progress line sits and how thick it is.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            portraitPosition = "top"; landscapePosition = "left"; thickness = 4
+                                            prefs.edit()
+                                                .putString("position_portrait", portraitPosition)
+                                                .putString("position_landscape", landscapePosition)
+                                                .putInt("thickness", thickness).apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset layout") }
                                     }
+                                    Text("Automatic orientation", style = MaterialTheme.typography.titleMedium)
+                                    Text("Portrait: horizontal line · Landscape: vertical line. The bar switches automatically when you rotate your phone.",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Thickness: $thickness dp", style = MaterialTheme.typography.titleMedium)
-                                    Slider(value = thickness.toFloat(), onValueChange = { thickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("thickness", thickness).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 2f..12f, steps = 9)
+                                    Slider(value = thickness.toFloat(), onValueChange = {
+                                        thickness = it.toInt().coerceIn(2, 12)
+                                        prefs.edit().putInt("thickness", thickness).apply()
+                                        if (overlayEnabled) refreshOverlay()
+                                    }, valueRange = 2f..12f, steps = 9)
+                                    Text("Portrait position", style = MaterialTheme.typography.titleMedium)
+                                    listOf("top" to "Top edge", "bottom" to "Bottom edge").forEach { (value, label) ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            RadioButton(selected = portraitPosition == value, onClick = {
+                                                portraitPosition = value
+                                                prefs.edit().putString("position_portrait", value).apply()
+                                                if (overlayEnabled) refreshOverlay()
+                                            })
+                                            Text(label)
+                                        }
+                                    }
+                                    Text("Landscape position", style = MaterialTheme.typography.titleMedium)
+                                    listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge").forEach { (value, label) ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            RadioButton(selected = landscapePosition == value, onClick = {
+                                                landscapePosition = value
+                                                prefs.edit().putString("position_landscape", value).apply()
+                                                if (overlayEnabled) refreshOverlay()
+                                            })
+                                            Text(label)
+                                        }
+                                    }
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Colour", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Choose an automatic app colour or your own fallback.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            appColor = true; customColorHex = ""; customColorMessage = ""
+                                            prefs.edit().putBoolean("app_color", true).remove("indicator_custom_color").apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset colour") }
+                                    }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Use app colour", style = MaterialTheme.typography.titleMedium)
@@ -479,22 +586,67 @@ class MainActivity : ComponentActivity() {
                                     }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                                         Text("Reset to app colours")
                                     }
+                                    Text("Quick colours", style = MaterialTheme.typography.titleMedium)
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("#8B5CF6", "#60A5FA", "#55D6BE", "#A6E3A1", "#FFB86C", "#F472B6")
+                                            .forEach { hex ->
+                                                FilterChip(
+                                                    selected = customColorHex.equals(hex, ignoreCase = true) && !appColor,
+                                                    onClick = {
+                                                        appColor = false
+                                                        customColorHex = hex
+                                                        customColorMessage = "Colour applied"
+                                                        prefs.edit().putBoolean("app_color", false).putString("indicator_custom_color", hex).apply()
+                                                        refreshOverlay()
+                                                    },
+                                                    label = { Text(hex) },
+                                                    leadingIcon = {
+                                                        Box(Modifier.size(16.dp).background(
+                                                            ComposeColor(android.graphics.Color.parseColor(hex)), CircleShape))
+                                                    }
+                                                )
+                                            }
+                                    }
+                                    Text("Custom colour picker", style = MaterialTheme.typography.titleMedium)
+                                    val pickedHex = String.format(java.util.Locale.US, "#%06X",
+                                        android.graphics.Color.HSVToColor(floatArrayOf(
+                                            pickerHue, pickerSaturation, pickerBrightness)) and 0xFFFFFF)
+                                    Row(verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Box(Modifier.size(36.dp).background(
+                                            ComposeColor(android.graphics.Color.parseColor(pickedHex)), CircleShape))
+                                        Text(pickedHex, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                    Text("Hue: ${pickerHue.toInt()}°", style = MaterialTheme.typography.bodySmall)
+                                    Slider(value = pickerHue, onValueChange = { pickerHue = it }, valueRange = 0f..360f)
+                                    Text("Saturation: ${(pickerSaturation * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                                    Slider(value = pickerSaturation, onValueChange = { pickerSaturation = it }, valueRange = 0f..1f)
+                                    Text("Brightness: ${(pickerBrightness * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+                                    Slider(value = pickerBrightness, onValueChange = { pickerBrightness = it }, valueRange = 0f..1f)
+                                    FilledTonalButton(onClick = {
+                                        appColor = false
+                                        customColorHex = pickedHex
+                                        customColorMessage = "Colour applied"
+                                        prefs.edit().putBoolean("app_color", false).putString("indicator_custom_color", pickedHex).apply()
+                                        refreshOverlay()
+                                    }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
+                                        Text("Use picked colour")
+                                    }
                                     Text("Individual app colour overrides can be cleared under Apps → Colour → Automatic.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("Position", style = MaterialTheme.typography.titleMedium)
-                                    val positionOptions = if (orientation == "vertical") {
-                                        listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
-                                    } else {
-                                        listOf("top" to "Top edge", "bottom" to "Bottom edge")
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Bar finish", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Adjust opacity and the ends of the line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            indicatorOpacity = 100; roundedCorners = true; emphasiseProgress = true
+                                            prefs.edit().putInt("indicator_opacity", 100).putBoolean("rounded_corners", true)
+                                                .putBoolean("emphasise_progress", true).apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset bar finish") }
                                     }
-                                    positionOptions.forEach { (value, label) ->
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            RadioButton(selected = position == value, onClick = { position = value; prefs.edit().putString("position", value).apply(); if (overlayEnabled) refreshOverlay() })
-                                            Text(label)
-                                        }
-                                    }
-
-                                    HorizontalDivider()
-                                    Text("Appearance details", style = MaterialTheme.typography.titleMedium)
                                     Text("Opacity: $indicatorOpacity%", style = MaterialTheme.typography.bodyMedium)
                                     Slider(value = indicatorOpacity.toFloat(), onValueChange = { indicatorOpacity = it.toInt().coerceIn(20, 100); prefs.edit().putInt("indicator_opacity", indicatorOpacity).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 20f..100f, steps = 39)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -504,8 +656,33 @@ class MainActivity : ComponentActivity() {
                                         }
                                         Switch(checked = roundedCorners, onCheckedChange = { roundedCorners = it; prefs.edit().putBoolean("rounded_corners", it).apply(); if (overlayEnabled) refreshOverlay() })
                                     }
-                                    HorizontalDivider()
-                                    Text("Tracking", style = MaterialTheme.typography.titleMedium)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("High contrast progress", style = MaterialTheme.typography.titleMedium)
+                                            Text("Make the coloured portion clearer with a dimmer unfilled track and a bright progress tip.",
+                                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = emphasiseProgress, onCheckedChange = { value ->
+                                            emphasiseProgress = value
+                                            prefs.edit().putBoolean("emphasise_progress", value).apply()
+                                            refreshOverlay()
+                                        })
+                                    }
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Tracking sources", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Select which activities PBar should follow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            showForDownloads = true; showForMedia = true; showForTimers = true
+                                            prefs.edit().putBoolean("show_for_downloads", true)
+                                                .putBoolean("show_for_media", true).putBoolean("show_for_timers", true).apply()
+                                            sendBroadcast(Intent(ProgressNotificationListener.ACTION_REFRESH)
+                                                .setPackage(this@MainActivity.packageName))
+                                        }) { Text("Reset tracking") }
+                                    }
                                     listOf(
                                         Triple("Downloads and transfers", "Read notification progress when apps expose it.", showForDownloads),
                                         Triple("Music and media", "Track supported playback sessions.", showForMedia),
@@ -541,8 +718,19 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                     }
-                                    HorizontalDivider()
-                                    Text("Screen behaviour", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Screen behaviour", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Control fullscreen and lock-screen visibility.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = {
+                                            hideFullscreen = false; showOnLockScreen = false
+                                            prefs.edit().putBoolean("hide_fullscreen", false).putBoolean("show_on_lock_screen", false).apply()
+                                            refreshOverlay()
+                                        }) { Text("Reset screen behaviour") }
+                                    }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Hide in fullscreen", style = MaterialTheme.typography.titleSmall)
@@ -601,9 +789,27 @@ class MainActivity : ComponentActivity() {
                                                 Text("${installedApps.count { it.first !in ignoredPackages }} of ${installedApps.size} apps enabled", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             OutlinedTextField(value = appsSearch, onValueChange = { appsSearch = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            // Keep all four filters visible in a single, balanced row.
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
                                                 listOf("All", "Enabled", "Disabled", "Detected").forEach { option ->
-                                                    FilterChip(selected = appsFilter == option, onClick = { appsFilter = option }, label = { Text(option) })
+                                                    FilterChip(
+                                                        selected = appsFilter == option,
+                                                        onClick = { appsFilter = option },
+                                                        modifier = Modifier.weight(1f),
+                                                        label = {
+                                                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                                                Text(
+                                                                    option,
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    maxLines = 1,
+                                                                    softWrap = false
+                                                                )
+                                                            }
+                                                        }
+                                                    )
                                                 }
                                             }
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -709,11 +915,23 @@ class MainActivity : ComponentActivity() {
                                                 Column(Modifier.weight(1f)) {
                                                     val advancedExpanded = true
                                                     var styleMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var orientationMenuExpanded by remember(packageName) { mutableStateOf(false) }
-                                                    var positionMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var portraitMenuExpanded by remember(packageName) { mutableStateOf(false) }
+                                                    var landscapeMenuExpanded by remember(packageName) { mutableStateOf(false) }
                                                     var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
-                                                    var appOrientation by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_orientation", "default") ?: "default") }
-                                                    var appPosition by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_position", "default") ?: "default") }
+                                                    var appPortraitPosition by remember(packageName) {
+                                                        mutableStateOf(
+                                                            prefs.getString("app_${packageName}_position_portrait",
+                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
+                                                                .takeIf { it == "top" || it == "bottom" } ?: "default"
+                                                        )
+                                                    }
+                                                    var appLandscapePosition by remember(packageName) {
+                                                        mutableStateOf(
+                                                            prefs.getString("app_${packageName}_position_landscape",
+                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
+                                                                .takeIf { it == "left" || it == "center" || it == "right" } ?: "default"
+                                                        )
+                                                    }
                                                     var appCustomHex by remember(packageName) { mutableStateOf(appColorOverrides[packageName] ?: "") }
                                                     var appThickness by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)) }
                                                     var appRingSize by remember(packageName) { mutableIntStateOf(prefs.getInt("app_${packageName}_ring_size", prefs.getInt("ring_size", 36)).coerceIn(24, 80)) }
@@ -780,38 +998,46 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             }
                                                         }
+                                                        Text("Orientation: Automatic (portrait = horizontal, landscape = vertical)",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Text("Orientation", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { orientationMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appOrientation == "default") "Default" else appOrientation.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = orientationMenuExpanded, onDismissRequest = { orientationMenuExpanded = false }) {
-                                                                listOf("default" to "Default", "horizontal" to "Horizontal", "vertical" to "Vertical").forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = {
-                                                                        appOrientation = value
+                                                            Text("Portrait position", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { portraitMenuExpanded = true }, shapes = ButtonDefaults.shapes()) {
+                                                                Text(if (appPortraitPosition == "default") "Global default"
+                                                                    else appPortraitPosition.replaceFirstChar { it.uppercase() })
+                                                            }
+                                                            DropdownMenu(expanded = portraitMenuExpanded, onDismissRequest = { portraitMenuExpanded = false }) {
+                                                                listOf("default" to "Global default", "top" to "Top", "bottom" to "Bottom").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appPortraitPosition = value
                                                                         val edit = prefs.edit()
-                                                                        if (value == "default") edit.remove("app_${packageName}_orientation") else edit.putString("app_${packageName}_orientation", value)
-                                                                        edit.apply()
-                                                                        orientationMenuExpanded = false
-                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                        if (value == "default") edit.remove("app_${packageName}_position_portrait")
+                                                                        else edit.putString("app_${packageName}_position_portrait", value)
+                                                                        // Older single-position overrides must not override a reset.
+                                                                        edit.remove("app_${packageName}_position").apply()
+                                                                        portraitMenuExpanded = false
+                                                                        refreshOverlay()
                                                                     })
                                                                 }
                                                             }
                                                         }
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Text("Position", modifier = Modifier.weight(1f))
-                                                            TextButton(onClick = { positionMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(if (appPosition == "default") "Default" else appPosition.replaceFirstChar { it.uppercase() }) }
-                                                            DropdownMenu(expanded = positionMenuExpanded, onDismissRequest = { positionMenuExpanded = false }) {
-                                                                (if ((appOrientation == "default" && orientation != "vertical") || appOrientation == "horizontal") {
-                                                                    listOf("default" to "Default", "top" to "Top", "bottom" to "Bottom")
-                                                                } else {
-                                                                    listOf("default" to "Default", "left" to "Left", "center" to "Centre", "right" to "Right")
-                                                                }).forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = {
-                                                                        appPosition = value
+                                                            Text("Landscape position", modifier = Modifier.weight(1f))
+                                                            TextButton(onClick = { landscapeMenuExpanded = true }, shapes = ButtonDefaults.shapes()) {
+                                                                Text(if (appLandscapePosition == "default") "Global default"
+                                                                    else appLandscapePosition.replaceFirstChar { it.uppercase() })
+                                                            }
+                                                            DropdownMenu(expanded = landscapeMenuExpanded, onDismissRequest = { landscapeMenuExpanded = false }) {
+                                                                listOf("default" to "Global default", "left" to "Left", "center" to "Centre", "right" to "Right").forEach { (value, label) ->
+                                                                    DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                                        appLandscapePosition = value
                                                                         val edit = prefs.edit()
-                                                                        if (value == "default") edit.remove("app_${packageName}_position") else edit.putString("app_${packageName}_position", value)
-                                                                        edit.apply()
-                                                                        positionMenuExpanded = false
-                                                                        sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
+                                                                        if (value == "default") edit.remove("app_${packageName}_position_landscape")
+                                                                        else edit.putString("app_${packageName}_position_landscape", value)
+                                                                        edit.remove("app_${packageName}_position").apply()
+                                                                        landscapeMenuExpanded = false
+                                                                        refreshOverlay()
                                                                     })
                                                                 }
                                                             }
@@ -820,8 +1046,8 @@ class MainActivity : ComponentActivity() {
                                                         Slider(value = appThickness.toFloat(), onValueChange = { appThickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("app_${packageName}_thickness", appThickness).apply(); sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName)) }, valueRange = 2f..12f, steps = 9)
 
                                                         TextButton(onClick = {
-                                                            prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
-                                                            appStyle = "default"; appOrientation = "default"; appPosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 36); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 0); appRingStroke = prefs.getInt("ring_stroke", 5)
+                                                            prefs.edit().remove("app_${packageName}_style").remove("app_${packageName}_orientation").remove("app_${packageName}_position").remove("app_${packageName}_position_portrait").remove("app_${packageName}_position_landscape").remove("app_${packageName}_thickness").remove("app_${packageName}_ring_size").remove("app_${packageName}_ring_offset_x").remove("app_${packageName}_ring_offset_y").remove("app_${packageName}_ring_stroke").apply()
+                                                            appStyle = "default"; appPortraitPosition = "default"; appLandscapePosition = "default"; appThickness = prefs.getInt("thickness", 4); appRingSize = prefs.getInt("ring_size", 36); appRingOffsetX = prefs.getInt("ring_offset_x", 0); appRingOffsetY = prefs.getInt("ring_offset_y", 0); appRingStroke = prefs.getInt("ring_stroke", 5)
                                                             sendBroadcast(Intent(ProgressNotificationListener.ACTION_SIGNAL).setPackage(this@MainActivity.packageName))
                                                         }, shapes = ButtonDefaults.shapes()) { Text("Reset app style") }
                                                     }
@@ -909,6 +1135,54 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressLinePreview(
+    orientation: String,
+    position: String,
+    thickness: Int,
+    colour: ComposeColor,
+    opacity: Int,
+    rounded: Boolean,
+    emphasiseProgress: Boolean,
+    fraction: Float
+) {
+    val vertical = orientation == "vertical"
+    val lineShape = if (rounded) RoundedCornerShape(50) else RoundedCornerShape(0.dp)
+    val alignment = if (vertical) when (position) {
+        "right" -> Alignment.CenterEnd
+        "center" -> Alignment.Center
+        else -> Alignment.CenterStart
+    } else if (position == "bottom") Alignment.BottomCenter else Alignment.TopCenter
+    Box(
+        Modifier.fillMaxWidth().height(112.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+            .padding(12.dp)
+    ) {
+        Box(
+            (if (vertical) Modifier.fillMaxHeight().width(thickness.dp)
+             else Modifier.fillMaxWidth().height(thickness.dp))
+                .align(alignment).background(
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (emphasiseProgress) 0.12f else 0.24f), lineShape)
+        ) {
+            Box(
+                (if (vertical) Modifier.fillMaxWidth().fillMaxHeight(fraction.coerceIn(0f, 1f))
+                 else Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)))
+                    .align(if (vertical) Alignment.BottomCenter else Alignment.CenterStart)
+                    .background(colour.copy(alpha = opacity / 100f), lineShape)
+            ) {
+                if (emphasiseProgress && fraction > 0f && fraction < 1f) {
+                    Box(
+                        (if (vertical) Modifier.fillMaxWidth().height(2.dp)
+                         else Modifier.fillMaxHeight().width(2.dp))
+                            .align(if (vertical) Alignment.TopCenter else Alignment.CenterEnd)
+                            .background(ComposeColor.White.copy(alpha = opacity / 100f))
+                    )
                 }
             }
         }

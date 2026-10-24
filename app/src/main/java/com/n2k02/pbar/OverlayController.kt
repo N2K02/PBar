@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -32,6 +33,9 @@ class OverlayController(private val host: Context) {
     private var overlay: IndicatorView? = null
     private var fullscreen = false
     private var receiverRegistered = false
+    private var demoStartedAt = 0L
+    private fun demoActive() = demoStartedAt > 0L &&
+        SystemClock.elapsedRealtime() - demoStartedAt < TEST_DURATION_MS
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -39,6 +43,7 @@ class OverlayController(private val host: Context) {
                 PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED ->
                     fullscreen = intent.getBooleanExtra(PBarAccessibilityService.EXTRA_FULLSCREEN, false)
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF, Intent.ACTION_USER_PRESENT -> fullscreen = false
+                ACTION_TEST_PROGRESS -> demoStartedAt = SystemClock.elapsedRealtime()
             }
             render()
         }
@@ -49,6 +54,8 @@ class OverlayController(private val host: Context) {
         if (!receiverRegistered) {
             val filter = IntentFilter().apply {
                 addAction(ProgressNotificationListener.ACTION_SIGNAL)
+                addAction(Intent.ACTION_CONFIGURATION_CHANGED)
+                addAction(ACTION_TEST_PROGRESS)
                 addAction(PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED)
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
@@ -67,6 +74,7 @@ class OverlayController(private val host: Context) {
             runCatching { host.unregisterReceiver(receiver) }
             receiverRegistered = false
         }
+        demoStartedAt = 0L
         removeOverlay()
     }
 
@@ -75,16 +83,27 @@ class OverlayController(private val host: Context) {
         val prefs = host.getSharedPreferences("pbar", Context.MODE_PRIVATE)
         val keyguard = host.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         val locked = keyguard.isKeyguardLocked
-        if (!prefs.getBoolean("overlay_enabled", false) || !prefs.getBoolean("has_signal", false) ||
+        if (!prefs.getBoolean("overlay_enabled", false) ||
+            (!prefs.getBoolean("has_signal", false) && !demoActive()) ||
             (prefs.getBoolean("hide_fullscreen", false) && fullscreen) ||
             (locked && !prefs.getBoolean("show_on_lock_screen", false))) {
             removeOverlay()
             return
         }
-        val sourcePackage = prefs.getString("signal_package", "").orEmpty()
-        val vertical = prefs.getString("app_${sourcePackage}_orientation", prefs.getString("orientation", "horizontal")) == "vertical"
+        // Demo deliberately uses the global style, not an app-specific override.
+        val sourcePackage = if (demoActive()) "" else prefs.getString("signal_package", "").orEmpty()
+        // The display itself determines line direction, never an app or user toggle.
+        val vertical = host.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
-        val appPosition = prefs.getString("app_${sourcePackage}_position", prefs.getString("position", "top"))
+        val allowedPositions = if (vertical) setOf("left", "center", "right") else setOf("top", "bottom")
+        val defaultPosition = if (vertical) "left" else "top"
+        val suffix = if (vertical) "landscape" else "portrait"
+        val globalPosition = prefs.getString("position_$suffix", prefs.getString("position", defaultPosition))
+            .takeIf { it in allowedPositions } ?: defaultPosition
+        val appPosition = if (sourcePackage.isBlank()) globalPosition else
+            prefs.getString("app_${sourcePackage}_position_$suffix",
+                prefs.getString("app_${sourcePackage}_position", globalPosition))
+                .takeIf { it in allowedPositions } ?: globalPosition
         val params = WindowManager.LayoutParams(
             if (vertical) dp(thickness) else WindowManager.LayoutParams.MATCH_PARENT,
             if (vertical) WindowManager.LayoutParams.MATCH_PARENT else dp(thickness),
@@ -119,6 +138,14 @@ class OverlayController(private val host: Context) {
         val current = overlay
         if (current != null) {
             current.updateFrom(prefs)
+            // Media tick broadcasts update the pixels, not window geometry. Avoid
+            // a WindowManager relayout on every tick (which can drop animation frames).
+            val old = current.layoutParams as? WindowManager.LayoutParams
+            if (old != null && old.width == params.width && old.height == params.height &&
+                old.gravity == params.gravity && old.flags == params.flags &&
+                old.x == params.x && old.y == params.y &&
+                (Build.VERSION.SDK_INT < 28 ||
+                    old.layoutInDisplayCutoutMode == params.layoutInDisplayCutoutMode)) return
             val updated = runCatching { wm.updateViewLayout(current, params) }
                 .onFailure { Log.w(TAG, "updateViewLayout failed; recreating overlay", it) }
                 .isSuccess
@@ -150,58 +177,119 @@ class OverlayController(private val host: Context) {
         private var indeterminate = false
         private var media = false
         private var signal = false
-        private var sourceColor = 0
         private var sourcePackage = ""
+        private var mediaTitle = ""
+        private var timerActive = false
+        private var timerRemainingMs = 0L
+        private var timerDurationMs = 0L
+        private var timerAnchorElapsed = 0L
+        private var positionCorrectionMs = 0f
+        private var correctionAnchorElapsed = 0L
+        private var primaryColor = Color.rgb(103, 80, 164)
+        private var opacity = 255
+        private var rounded = true
+        private var emphasiseProgress = true
 
         fun updateFrom(prefs: SharedPreferences) {
+            val nextPackage = if (demoActive()) "" else prefs.getString("signal_package", "").orEmpty()
+            val nextTitle = if (demoActive()) "" else prefs.getString("signal_title", "").orEmpty()
+            val nextMedia = !demoActive() && prefs.getBoolean("signal_media", false)
+            val nextPosition = prefs.getLong(
+                "signal_raw_position", prefs.getLong("signal_position", 0L)
+            ).coerceAtLeast(0L)
+            val nextDuration = prefs.getLong("signal_duration", 0L).coerceAtLeast(0L)
+            val nextPlaying = prefs.getBoolean("signal_playing", false)
+            val nextSpeed = prefs.getFloat("signal_speed", 1f).coerceIn(-4f, 4f)
+            val playerAnchor = prefs.getLong("signal_anchor_elapsed", 0L)
+            val now = SystemClock.elapsedRealtime()
+            val previousPosition = interpolatedMediaPosition(now)
+            // Android playback timestamps are expressed in elapsed-realtime milliseconds.
+            // Preserve the clock between reports and only fall back to our own when absent.
+            val nextAnchor = if (nextMedia && playerAnchor in 1L..now) playerAnchor
+                else if (nextPackage != sourcePackage || nextTitle != mediaTitle || nextMedia != media ||
+                    nextPosition != mediaPositionMs || nextDuration != mediaDurationMs ||
+                    nextPlaying != mediaPlaying || nextSpeed != mediaSpeed) now
+                else mediaAnchorElapsed
+            // Tiny player corrections should ease into place; real seeks or track changes
+            // must snap immediately to the new position (no misleading slow catch-up).
+            val newPosition = (nextPosition +
+                (if (nextPlaying) (now - nextAnchor).coerceAtLeast(0L) * nextSpeed else 0f))
+                .coerceIn(0f, nextDuration.toFloat())
+            val continuous = nextMedia && media && nextPlaying && mediaPlaying &&
+                nextPackage == sourcePackage && nextTitle == mediaTitle && nextDuration == mediaDurationMs
+            val delta = previousPosition - newPosition
+            positionCorrectionMs = if (continuous && kotlin.math.abs(delta) <= 1500f) delta else 0f
+            correctionAnchorElapsed = now
+            mediaAnchorElapsed = nextAnchor
             progress = prefs.getInt("signal_progress", 0).coerceIn(0, 100)
-            mediaPositionMs = prefs.getLong("signal_position", 0L).coerceAtLeast(0L)
-            mediaDurationMs = prefs.getLong("signal_duration", 0L).coerceAtLeast(0L)
-            mediaPlaying = prefs.getBoolean("signal_playing", false)
-            mediaSpeed = prefs.getFloat("signal_speed", 1f).coerceIn(0.1f, 4f)
-            mediaAnchorElapsed = SystemClock.elapsedRealtime()
-            indeterminate = prefs.getBoolean("signal_indeterminate", false)
-            media = prefs.getBoolean("signal_media", false)
-            signal = prefs.getBoolean("has_signal", false)
-            sourceColor = prefs.getInt("signal_color", 0)
-            sourcePackage = prefs.getString("signal_package", "").orEmpty()
+            mediaPositionMs = nextPosition
+            mediaDurationMs = nextDuration
+            mediaPlaying = nextPlaying
+            mediaSpeed = nextSpeed
+            timerActive = !demoActive() && prefs.getBoolean("signal_timer", false)
+            timerRemainingMs = prefs.getLong("signal_timer_remaining_ms", 0L).coerceAtLeast(0L)
+            timerDurationMs = prefs.getLong("signal_timer_total_ms", 0L).coerceAtLeast(0L)
+            timerAnchorElapsed = prefs.getLong("signal_timer_anchor_elapsed", 0L)
+            indeterminate = !demoActive() && prefs.getBoolean("signal_indeterminate", false)
+            media = nextMedia
+            signal = demoActive() || prefs.getBoolean("has_signal", false)
+            val fallbackColor = if (Build.VERSION.SDK_INT >= 31) {
+                val typed = TypedValue()
+                if (context.theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data
+                else Color.rgb(103, 80, 164)
+            } else Color.rgb(103, 80, 164)
+            sourcePackage = nextPackage
+            mediaTitle = nextTitle
+            val sourceColor = if (demoActive()) 0 else prefs.getInt("signal_color", 0)
+            val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
+                .firstOrNull { it.startsWith("$nextPackage=") }
+                ?.substringAfter("=")
+                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+            val customColor = prefs.getString("indicator_custom_color", null)
+                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+            primaryColor = appOverride
+                ?: if (prefs.getBoolean("app_color", true) && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor
+                else customColor ?: fallbackColor
+            opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
+            rounded = prefs.getBoolean("rounded_corners", true)
+            emphasiseProgress = prefs.getBoolean("emphasise_progress", true)
             invalidate()
         }
 
-        private fun currentProgress(): Int {
-            if (!media || mediaDurationMs <= 0L) return progress
-            val elapsed = if (mediaPlaying) (SystemClock.elapsedRealtime() - mediaAnchorElapsed).coerceAtLeast(0L) else 0L
-            val estimated = mediaPositionMs + (elapsed * mediaSpeed).toLong()
-            return ((estimated.coerceIn(0L, mediaDurationMs) * 100L) / mediaDurationMs).toInt()
+        private fun interpolatedMediaPosition(now: Long): Float {
+            if (!media || mediaDurationMs <= 0L) return 0f
+            val elapsed = if (mediaPlaying) (now - mediaAnchorElapsed).coerceAtLeast(0L) else 0L
+            val raw = mediaPositionMs + elapsed * mediaSpeed
+            val remainingCorrection = if (mediaPlaying)
+                positionCorrectionMs * (1f - (now - correctionAnchorElapsed).coerceAtLeast(0L) / 650f)
+                    .coerceIn(0f, 1f)
+            else 0f
+            return (raw + remainingCorrection).coerceIn(0f, mediaDurationMs.toFloat())
+        }
+
+        private fun currentProgress(): Float {
+            val now = SystemClock.elapsedRealtime()
+            if (demoActive()) return ((now - demoStartedAt) * 100f / TEST_DURATION_MS).coerceIn(0f, 100f)
+            if (timerActive && timerDurationMs > 0L && timerAnchorElapsed > 0L) {
+                val remaining = (timerRemainingMs - (now - timerAnchorElapsed).coerceAtLeast(0L))
+                    .coerceIn(0L, timerDurationMs)
+                return 100f * (timerDurationMs - remaining).toFloat() / timerDurationMs
+            }
+            if (media && mediaDurationMs > 0L)
+                return interpolatedMediaPosition(now) * 100f / mediaDurationMs
+            return progress.toFloat()
         }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val displayProgress = currentProgress()
-            val fallbackColor = if (Build.VERSION.SDK_INT >= 31) {
-                val typed = TypedValue()
-                if (context.theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data else Color.rgb(103, 80, 164)
-            } else Color.rgb(103, 80, 164)
-            val prefs = host.getSharedPreferences("pbar", Context.MODE_PRIVATE)
-            val appColorEnabled = prefs.getBoolean("app_color", true)
-            val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
-                .firstOrNull { it.startsWith("$sourcePackage=") }
-                ?.substringAfter("=")
-                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
-            val customColor = prefs.getString("indicator_custom_color", null)
-                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
-            val primary = appOverride
-                ?: if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor
-                else customColor ?: fallbackColor
-            val opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
-            val rounded = prefs.getBoolean("rounded_corners", true)
-
             paint.style = Paint.Style.FILL
-            paint.color = Color.argb(opacity * 80 / 255, 150, 150, 150)
+            // Keep the inactive track subtle so the coloured, played portion stands out.
+            paint.color = Color.argb(opacity * (if (emphasiseProgress) 40 else 80) / 255, 150, 150, 150)
             if (rounded) canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), height / 2f, height / 2f, paint)
             else canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
             if (signal) {
-                paint.color = Color.argb(opacity, Color.red(primary), Color.green(primary), Color.blue(primary))
+                paint.color = Color.argb(opacity, Color.red(primaryColor), Color.green(primaryColor), Color.blue(primaryColor))
                 if (width < height) {
                     val segment = if (indeterminate) height * 0.35f else height * displayProgress / 100f
                     val start = if (indeterminate) ((SystemClock.uptimeMillis() % 1400L) / 1400f) * (height - segment) else height - segment
@@ -213,11 +301,36 @@ class OverlayController(private val host: Context) {
                     if (rounded) canvas.drawRoundRect(start, 0f, start + segment, height.toFloat(), height / 2f, height / 2f, paint)
                     else canvas.drawRect(start, 0f, start + segment, height.toFloat(), paint)
                 }
+                // Small neutral tip clearly marks the current playback position.
+                // It stays within the existing overlay bounds and respects opacity.
+                if (emphasiseProgress && !indeterminate && displayProgress > 0f && displayProgress < 100f) {
+                    paint.color = Color.argb(opacity, 255, 255, 255)
+                    if (width < height) {
+                        val end = height * (1f - displayProgress / 100f)
+                        val markerHeight = dp(2).toFloat().coerceAtMost(height.toFloat())
+                        canvas.drawRect(0f, end, width.toFloat(),
+                            (end + markerHeight).coerceAtMost(height.toFloat()), paint)
+                    } else {
+                        val end = width * displayProgress / 100f
+                        val markerWidth = dp(2).toFloat().coerceAtMost(width.toFloat())
+                        canvas.drawRect((end - markerWidth).coerceAtLeast(0f), 0f,
+                            end, height.toFloat(), paint)
+                    }
+                }
             }
-            if (signal && indeterminate) postInvalidateDelayed(32L)
-            else if (signal && media && mediaPlaying && mediaDurationMs > 0L) postInvalidateDelayed(16L)
+            if (demoStartedAt > 0L && !demoActive()) {
+                // The preview never modifies real signals; resume the original overlay state.
+                demoStartedAt = 0L
+                post { render() }
+            } else if (demoActive() || (signal && (indeterminate ||
+                (media && mediaPlaying && mediaDurationMs > 0L) ||
+                (timerActive && timerDurationMs > 0L)))) postInvalidateOnAnimation()
         }
     }
 
-    private companion object { const val TAG = "PBar" }
+    companion object {
+        const val ACTION_TEST_PROGRESS = "com.n2k02.pbar.TEST_PROGRESS"
+        const val TEST_DURATION_MS = 10_000L
+        private const val TAG = "PBar"
+    }
 }
