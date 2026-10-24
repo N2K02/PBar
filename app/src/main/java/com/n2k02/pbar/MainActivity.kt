@@ -26,10 +26,10 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Home as HomeRounded
+import androidx.compose.material.icons.rounded.Palette as PaletteRounded
+import androidx.compose.material.icons.rounded.Tune as TuneRounded
+import androidx.compose.material.icons.rounded.SystemUpdate as SystemUpdateRounded
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -273,10 +273,10 @@ class MainActivity : ComponentActivity() {
                                 if (selectedApp == null) {
                                     Icon(
                                         when (tab) {
-                                            Tab.HOME -> Icons.Rounded.Home
-                                            Tab.STYLE -> Icons.Rounded.Palette
-                                            Tab.APPS -> Icons.Rounded.Tune
-                                            Tab.UPDATES -> Icons.Rounded.SystemUpdate
+                                            Tab.HOME -> Icons.Rounded.HomeRounded
+                                            Tab.STYLE -> Icons.Rounded.PaletteRounded
+                                            Tab.APPS -> Icons.Rounded.TuneRounded
+                                            Tab.UPDATES -> Icons.Rounded.SystemUpdateRounded
                                         },
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
@@ -313,10 +313,10 @@ class MainActivity : ComponentActivity() {
                 },
                 bottomBar = {
                     NavigationBar {
-                        NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.Home, null) }, label = { Text("Home") })
-                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Rounded.Palette, null) }, label = { Text("Appearance") })
-                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Rounded.Tune, null) }, label = { Text("Apps") })
-                        NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { selectedApp = null; tab = Tab.UPDATES }, icon = { Icon(Icons.Rounded.SystemUpdate, null) }, label = { Text("Updates") })
+                        NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.HomeRounded, null) }, label = { Text("Home") })
+                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Rounded.PaletteRounded, null) }, label = { Text("Appearance") })
+                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Rounded.TuneRounded, null) }, label = { Text("Apps") })
+                        NavigationBarItem(selected = tab == Tab.UPDATES, onClick = { selectedApp = null; tab = Tab.UPDATES }, icon = { Icon(Icons.Rounded.SystemUpdateRounded, null) }, label = { Text("Updates") })
                     }
                 }
             ) { padding ->
@@ -713,7 +713,7 @@ class MainActivity : ComponentActivity() {
                                                         TextButton(onClick = { colorMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text("Colour: $currentColorName") }
                                                         DropdownMenu(expanded = colorMenuExpanded, onDismissRequest = { colorMenuExpanded = false }) {
                                                             appColorOptions.forEach { (optionName, hex) ->
-                                                                DropdownMenuItem(text = { Text(optionName) }, leadingIcon = { Icon(Icons.Rounded.Palette, null) }, onClick = {
+                                                                DropdownMenuItem(text = { Text(optionName) }, leadingIcon = { Icon(Icons.Rounded.PaletteRounded, null) }, onClick = {
                                                                     val updated = appColorOverrides.toMutableMap()
                                                                     if (hex.isBlank()) updated.remove(packageName) else updated[packageName] = hex
                                                                     appCustomHex = hex
@@ -753,7 +753,7 @@ class MainActivity : ComponentActivity() {
                                                             TextButton(onClick = { styleMenuExpanded = true }, shapes = ButtonDefaults.shapes()) { Text(when (appStyle) { "line" -> "Line"; else -> "Default" }) }
                                                             DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
                                                                 listOf("default" to "Default", "line" to "Line").forEach { (value, label) ->
-                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Rounded.Tune, null) }, onClick = {
+                                                                    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(Icons.Rounded.TuneRounded, null) }, onClick = {
                                                                         appStyle = value
                                                                         val edit = prefs.edit()
                                                                         if (value == "default") edit.remove("app_${packageName}_style") else edit.putString("app_${packageName}_style", value)
