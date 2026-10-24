@@ -119,6 +119,14 @@ class OverlayController(private val host: Context) {
         val current = overlay
         if (current != null) {
             current.updateFrom(prefs)
+            // Media tick broadcasts update the pixels, not window geometry. Avoid
+            // a WindowManager relayout on every tick (which can drop animation frames).
+            val old = current.layoutParams as? WindowManager.LayoutParams
+            if (old != null && old.width == params.width && old.height == params.height &&
+                old.gravity == params.gravity && old.flags == params.flags &&
+                old.x == params.x && old.y == params.y &&
+                (Build.VERSION.SDK_INT < 28 ||
+                    old.layoutInDisplayCutoutMode == params.layoutInDisplayCutoutMode)) return
             val updated = runCatching { wm.updateViewLayout(current, params) }
                 .onFailure { Log.w(TAG, "updateViewLayout failed; recreating overlay", it) }
                 .isSuccess
@@ -150,8 +158,9 @@ class OverlayController(private val host: Context) {
         private var indeterminate = false
         private var media = false
         private var signal = false
-        private var sourceColor = 0
-        private var sourcePackage = ""
+        private var primaryColor = Color.rgb(103, 80, 164)
+        private var opacity = 255
+        private var rounded = true
 
         fun updateFrom(prefs: SharedPreferences) {
             val nextPackage = prefs.getString("signal_package", "").orEmpty()
@@ -181,8 +190,23 @@ class OverlayController(private val host: Context) {
             indeterminate = prefs.getBoolean("signal_indeterminate", false)
             media = nextMedia
             signal = prefs.getBoolean("has_signal", false)
-            sourceColor = prefs.getInt("signal_color", 0)
-            sourcePackage = nextPackage
+            val fallbackColor = if (Build.VERSION.SDK_INT >= 31) {
+                val typed = TypedValue()
+                if (context.theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data
+                else Color.rgb(103, 80, 164)
+            } else Color.rgb(103, 80, 164)
+            val sourceColor = prefs.getInt("signal_color", 0)
+            val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
+                .firstOrNull { it.startsWith("$nextPackage=") }
+                ?.substringAfter("=")
+                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+            val customColor = prefs.getString("indicator_custom_color", null)
+                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
+            primaryColor = appOverride
+                ?: if (prefs.getBoolean("app_color", true) && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor
+                else customColor ?: fallbackColor
+            opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
+            rounded = prefs.getBoolean("rounded_corners", true)
             invalidate()
         }
 
@@ -198,30 +222,12 @@ class OverlayController(private val host: Context) {
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val displayProgress = currentProgress()
-            val fallbackColor = if (Build.VERSION.SDK_INT >= 31) {
-                val typed = TypedValue()
-                if (context.theme.resolveAttribute(android.R.attr.colorAccent, typed, true)) typed.data else Color.rgb(103, 80, 164)
-            } else Color.rgb(103, 80, 164)
-            val prefs = host.getSharedPreferences("pbar", Context.MODE_PRIVATE)
-            val appColorEnabled = prefs.getBoolean("app_color", true)
-            val appOverride = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty()
-                .firstOrNull { it.startsWith("$sourcePackage=") }
-                ?.substringAfter("=")
-                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
-            val customColor = prefs.getString("indicator_custom_color", null)
-                ?.let { runCatching { Color.parseColor(it) }.getOrNull() }
-            val primary = appOverride
-                ?: if (appColorEnabled && sourceColor != Color.TRANSPARENT && sourceColor != 0) sourceColor
-                else customColor ?: fallbackColor
-            val opacity = prefs.getInt("indicator_opacity", 100).coerceIn(20, 100) * 255 / 100
-            val rounded = prefs.getBoolean("rounded_corners", true)
-
             paint.style = Paint.Style.FILL
             paint.color = Color.argb(opacity * 80 / 255, 150, 150, 150)
             if (rounded) canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), height / 2f, height / 2f, paint)
             else canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
             if (signal) {
-                paint.color = Color.argb(opacity, Color.red(primary), Color.green(primary), Color.blue(primary))
+                paint.color = Color.argb(opacity, Color.red(primaryColor), Color.green(primaryColor), Color.blue(primaryColor))
                 if (width < height) {
                     val segment = if (indeterminate) height * 0.35f else height * displayProgress / 100f
                     val start = if (indeterminate) ((SystemClock.uptimeMillis() % 1400L) / 1400f) * (height - segment) else height - segment
