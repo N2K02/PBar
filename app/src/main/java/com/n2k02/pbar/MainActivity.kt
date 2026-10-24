@@ -436,7 +436,8 @@ class MainActivity : ComponentActivity() {
                         Tab.STYLE -> {
                             ElevatedCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("Progress bar", style = MaterialTheme.typography.titleMedium)
+                                    Text("Layout & position", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Choose where the progress line sits and how thick it is.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Orientation", style = MaterialTheme.typography.titleMedium)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         FilterChip(selected = orientation == "horizontal", onClick = { orientation = "horizontal"; if (position !in listOf("top", "bottom")) position = "top"; prefs.edit().putString("orientation", orientation).putString("position", position).apply(); if (overlayEnabled) refreshOverlay() }, label = { Text("Horizontal") })
@@ -444,6 +445,24 @@ class MainActivity : ComponentActivity() {
                                     }
                                     Text("Thickness: $thickness dp", style = MaterialTheme.typography.titleMedium)
                                     Slider(value = thickness.toFloat(), onValueChange = { thickness = it.toInt().coerceIn(2, 12); prefs.edit().putInt("thickness", thickness).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 2f..12f, steps = 9)
+                                    Text("Position", style = MaterialTheme.typography.titleMedium)
+                                    val positionOptions = if (orientation == "vertical") {
+                                        listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
+                                    } else {
+                                        listOf("top" to "Top edge", "bottom" to "Bottom edge")
+                                    }
+                                    positionOptions.forEach { (value, label) ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            RadioButton(selected = position == value, onClick = { position = value; prefs.edit().putString("position", value).apply(); if (overlayEnabled) refreshOverlay() })
+                                            Text(label)
+                                        }
+                                    }
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Colour", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Choose an automatic app colour or your own fallback.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Use app colour", style = MaterialTheme.typography.titleMedium)
@@ -480,21 +499,12 @@ class MainActivity : ComponentActivity() {
                                         Text("Reset to app colours")
                                     }
                                     Text("Individual app colour overrides can be cleared under Apps → Colour → Automatic.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("Position", style = MaterialTheme.typography.titleMedium)
-                                    val positionOptions = if (orientation == "vertical") {
-                                        listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge")
-                                    } else {
-                                        listOf("top" to "Top edge", "bottom" to "Bottom edge")
-                                    }
-                                    positionOptions.forEach { (value, label) ->
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            RadioButton(selected = position == value, onClick = { position = value; prefs.edit().putString("position", value).apply(); if (overlayEnabled) refreshOverlay() })
-                                            Text(label)
-                                        }
-                                    }
-
-                                    HorizontalDivider()
-                                    Text("Appearance details", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Bar finish", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Adjust opacity and the ends of the line.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Opacity: $indicatorOpacity%", style = MaterialTheme.typography.bodyMedium)
                                     Slider(value = indicatorOpacity.toFloat(), onValueChange = { indicatorOpacity = it.toInt().coerceIn(20, 100); prefs.edit().putInt("indicator_opacity", indicatorOpacity).apply(); if (overlayEnabled) refreshOverlay() }, valueRange = 20f..100f, steps = 39)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -504,8 +514,12 @@ class MainActivity : ComponentActivity() {
                                         }
                                         Switch(checked = roundedCorners, onCheckedChange = { roundedCorners = it; prefs.edit().putBoolean("rounded_corners", it).apply(); if (overlayEnabled) refreshOverlay() })
                                     }
-                                    HorizontalDivider()
-                                    Text("Tracking", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Tracking sources", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Select which activities PBar should follow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     listOf(
                                         Triple("Downloads and transfers", "Read notification progress when apps expose it.", showForDownloads),
                                         Triple("Music and media", "Track supported playback sessions.", showForMedia),
@@ -541,8 +555,12 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                     }
-                                    HorizontalDivider()
-                                    Text("Screen behaviour", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Screen behaviour", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                    Text("Control fullscreen and lock-screen visibility.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Hide in fullscreen", style = MaterialTheme.typography.titleSmall)
