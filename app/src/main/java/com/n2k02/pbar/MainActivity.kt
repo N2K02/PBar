@@ -56,7 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), SETTINGS("Settings") }
-private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("App updates") }
+private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("About & updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -390,8 +390,8 @@ class MainActivity : ComponentActivity() {
                 Column(
                     Modifier.fillMaxSize().padding(padding)
                         .then(if (tab == Tab.APPS && selectedApp == null) Modifier else Modifier.verticalScroll(rememberScrollState()))
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(if (tab == Tab.SETTINGS) 12.dp else 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (tab == Tab.SETTINGS) 4.dp else 12.dp)
                 ) {
                     when (tab) {
                         Tab.HOME -> {
@@ -1068,7 +1068,13 @@ class MainActivity : ComponentActivity() {
                         Tab.SETTINGS -> {
                             when (settingsPage) {
                                 SettingsPage.MAIN -> {
-                                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            "Make PBar your own",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 12.dp),
+                                        )
                                         ListItem(
                                             headlineContent = { Text("Appearance") },
                                             supportingContent = { Text("Progress bar style and layout") },
@@ -1076,7 +1082,6 @@ class MainActivity : ComponentActivity() {
                                             trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
                                             modifier = Modifier.clickable { selectedApp = null; tab = Tab.STYLE },
                                         )
-                                        HorizontalDivider()
                                         ListItem(
                                             headlineContent = { Text("Apps") },
                                             supportingContent = { Text("Choose and customize tracked apps") },
@@ -1089,7 +1094,6 @@ class MainActivity : ComponentActivity() {
                                                 tab = Tab.APPS
                                             },
                                         )
-                                        HorizontalDivider()
                                         ListItem(
                                             headlineContent = { Text("Permissions") },
                                             supportingContent = {
@@ -1101,7 +1105,7 @@ class MainActivity : ComponentActivity() {
                                         )
                                         HorizontalDivider()
                                         ListItem(
-                                            headlineContent = { Text("App updates") },
+                                            headlineContent = { Text("About & updates") },
                                             supportingContent = { Text("Version ${BuildConfig.VERSION_NAME} · update options") },
                                             leadingContent = { Icon(Icons.Rounded.SystemUpdateRounded, contentDescription = null) },
                                             trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
