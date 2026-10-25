@@ -334,35 +334,26 @@ class MainActivity : ComponentActivity() {
                     TopAppBar(
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                if (selectedApp == null && !(tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN)) {
-                                    Icon(
-                                        when (tab) {
-                                            Tab.HOME -> Icons.Rounded.HomeRounded
-                                            Tab.STYLE -> Icons.Rounded.PaletteRounded
-                                            Tab.APPS -> Icons.Rounded.TuneRounded
-                                            Tab.SETTINGS -> Icons.Rounded.SettingsRounded
-                                        },
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                if (tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES) {
-                                    dev.n2k02.updater.N2K02UpdateTitle()
-                                } else Text(
+                                Icon(
+                                    when {
+                                        selectedApp != null -> Icons.Rounded.TuneRounded
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES -> Icons.Rounded.SystemUpdateRounded
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.PERMISSIONS -> Icons.Rounded.Security
+                                        tab == Tab.STYLE -> Icons.Rounded.PaletteRounded
+                                        tab == Tab.APPS -> Icons.Rounded.TuneRounded
+                                        tab == Tab.SETTINGS -> Icons.Rounded.SettingsRounded
+                                        else -> Icons.Rounded.HomeRounded
+                                    },
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Text(
                                     if (selectedApp != null) "Customize app" else if (tab == Tab.SETTINGS) settingsPage.title else tab.label,
                                     style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
                                 )
-                            }
-                        },
-                        navigationIcon = {
-                            if (selectedApp != null || (tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN)) {
-                                IconButton(onClick = {
-                                    if (selectedApp != null) selectedApp = null else settingsPage = SettingsPage.MAIN
-                                }) {
-                                    Icon(Icons.Rounded.ArrowBack, contentDescription = if (selectedApp != null) "Back to apps" else "Back to Settings")
-                                }
                             }
                         },
                         actions = {
@@ -373,6 +364,8 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 if (pbarIcon != null) {
                                     Image(bitmap = pbarIcon, contentDescription = null, modifier = Modifier.size(26.dp))
+                                } else {
+                                    dev.n2k02.updater.N2K02AppIcon(Modifier.size(26.dp))
                                 }
                                 Text("PBar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             }
