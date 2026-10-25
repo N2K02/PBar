@@ -162,14 +162,12 @@ class MainActivity : ComponentActivity() {
         // Keep independent edge positions when the device rotates.
         var portraitPosition by remember {
             mutableStateOf(
-                (prefs.getString("position_portrait", prefs.getString("position", "top")) ?: "top")
-                    .takeIf { it == "top" || it == "bottom" } ?: "top"
+                PBarPositions.portrait(prefs.getString("position_portrait", prefs.getString("position", "top")))
             )
         }
         var landscapePosition by remember {
             mutableStateOf(
-                (prefs.getString("position_landscape", prefs.getString("position", "left")) ?: "left")
-                    .takeIf { it == "left" || it == "center" || it == "right" } ?: "left"
+                PBarPositions.landscape(prefs.getString("position_landscape", prefs.getString("position", "left")))
             )
         }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
@@ -509,7 +507,7 @@ class MainActivity : ComponentActivity() {
                                         if (overlayEnabled) refreshOverlay()
                                     }, valueRange = 2f..12f, steps = 9)
                                     Text("Portrait position", style = MaterialTheme.typography.titleMedium)
-                                    listOf("top" to "Top edge", "bottom" to "Bottom edge").forEach { (value, label) ->
+                                    PBarPositions.portraitChoices.forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             RadioButton(selected = portraitPosition == value, onClick = {
                                                 portraitPosition = value
@@ -520,7 +518,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     Text("Landscape position", style = MaterialTheme.typography.titleMedium)
-                                    listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge").forEach { (value, label) ->
+                                    PBarPositions.landscapeChoices.forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             RadioButton(selected = landscapePosition == value, onClick = {
                                                 landscapePosition = value
@@ -912,16 +910,20 @@ class MainActivity : ComponentActivity() {
                                                     var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
                                                     var appPortraitPosition by remember(packageName) {
                                                         mutableStateOf(
-                                                            prefs.getString("app_${packageName}_position_portrait",
-                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
-                                                                .takeIf { it == "top" || it == "bottom" } ?: "default"
+                                                            PBarPositions.portrait(
+                                                                prefs.getString("app_${packageName}_position_portrait",
+                                                                    prefs.getString("app_${packageName}_position", "default")),
+                                                                fallback = "default",
+                                                            )
                                                         )
                                                     }
                                                     var appLandscapePosition by remember(packageName) {
                                                         mutableStateOf(
-                                                            prefs.getString("app_${packageName}_position_landscape",
-                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
-                                                                .takeIf { it == "left" || it == "center" || it == "right" } ?: "default"
+                                                            PBarPositions.landscape(
+                                                                prefs.getString("app_${packageName}_position_landscape",
+                                                                    prefs.getString("app_${packageName}_position", "default")),
+                                                                fallback = "default",
+                                                            )
                                                         )
                                                     }
                                                     var appCustomHex by remember(packageName) { mutableStateOf(appColorOverrides[packageName] ?: "") }
@@ -1000,7 +1002,7 @@ class MainActivity : ComponentActivity() {
                                                                     else appPortraitPosition.replaceFirstChar { it.uppercase() })
                                                             }
                                                             DropdownMenu(expanded = portraitMenuExpanded, onDismissRequest = { portraitMenuExpanded = false }) {
-                                                                listOf("default" to "Global default", "top" to "Top", "bottom" to "Bottom").forEach { (value, label) ->
+                                                                (listOf("default" to "Global default") + PBarPositions.portraitChoices).forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appPortraitPosition = value
                                                                         val edit = prefs.edit()
@@ -1021,7 +1023,7 @@ class MainActivity : ComponentActivity() {
                                                                     else appLandscapePosition.replaceFirstChar { it.uppercase() })
                                                             }
                                                             DropdownMenu(expanded = landscapeMenuExpanded, onDismissRequest = { landscapeMenuExpanded = false }) {
-                                                                listOf("default" to "Global default", "left" to "Left", "center" to "Centre", "right" to "Right").forEach { (value, label) ->
+                                                                (listOf("default" to "Global default") + PBarPositions.landscapeChoices).forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appLandscapePosition = value
                                                                         val edit = prefs.edit()
@@ -1173,9 +1175,8 @@ private fun ProgressLinePreview(
     val lineShape = if (rounded) RoundedCornerShape(50) else RoundedCornerShape(0.dp)
     val alignment = if (vertical) when (position) {
         "right" -> Alignment.CenterEnd
-        "center" -> Alignment.Center
-        else -> Alignment.CenterStart
-    } else if (position == "bottom") Alignment.BottomCenter else Alignment.TopCenter
+                else -> Alignment.CenterStart
+    } else if (PBarPositions.anchoredAtBottom(position)) Alignment.BottomCenter else Alignment.TopCenter
     Box(
         Modifier.fillMaxWidth().height(112.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
