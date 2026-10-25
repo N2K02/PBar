@@ -160,8 +160,7 @@ class MainActivity : ComponentActivity() {
         var showTrackingDetails by remember { mutableStateOf(false) }
         var overlayEnabled by remember { mutableStateOf(true) }
         var style by remember { mutableStateOf("line") }
-        // Portrait always uses a horizontal line; landscape always uses a vertical one.
-        // Keep independent edge positions when the device rotates.
+        // Both orientations use horizontal lines, with independent positions when rotating.
         var portraitPosition by remember {
             mutableStateOf(
                 PBarPositions.portrait(prefs.getString("position_portrait", prefs.getString("position", "top")))
@@ -169,7 +168,7 @@ class MainActivity : ComponentActivity() {
         }
         var landscapePosition by remember {
             mutableStateOf(
-                PBarPositions.landscape(prefs.getString("position_landscape", prefs.getString("position", "left")))
+                PBarPositions.landscape(prefs.getString("position_landscape", prefs.getString("position", "top")))
             )
         }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
@@ -476,7 +475,7 @@ class MainActivity : ComponentActivity() {
                                     val previewColour = runCatching {
                                         ComposeColor(android.graphics.Color.parseColor(customColorHex))
                                     }.getOrNull() ?: MaterialTheme.colorScheme.primary
-                                    ProgressLinePreview(if (landscape) "vertical" else "horizontal",
+                                    ProgressLinePreview(
                                         if (landscape) landscapePosition else portraitPosition, thickness, previewColour,
                                         indicatorOpacity, roundedCorners, emphasiseProgress, previewProgress)
                                     FilledTonalButton(
@@ -500,7 +499,7 @@ class MainActivity : ComponentActivity() {
                                     Text("Choose where the progress line sits and how thick it is.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                         TextButton(onClick = {
-                                            portraitPosition = "top"; landscapePosition = "left"; thickness = 4
+                                            portraitPosition = "top"; landscapePosition = "top"; thickness = 4
                                             prefs.edit()
                                                 .putString("position_portrait", portraitPosition)
                                                 .putString("position_landscape", landscapePosition)
@@ -509,7 +508,7 @@ class MainActivity : ComponentActivity() {
                                         }) { Text("Reset layout") }
                                     }
                                     Text("Automatic orientation", style = MaterialTheme.typography.titleMedium)
-                                    Text("Portrait: horizontal line · Landscape: vertical line. The bar switches automatically when you rotate your phone.",
+                                    Text("Horizontal line in portrait and landscape. The position switches automatically when you rotate your phone.",
                                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text("Thickness: $thickness dp", style = MaterialTheme.typography.titleMedium)
                                     Slider(value = thickness.toFloat(), onValueChange = {
@@ -1003,7 +1002,7 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             }
                                                         }
-                                                        Text("Orientation: Automatic (portrait = horizontal, landscape = vertical)",
+                                                        Text("Orientation: Automatic (horizontal in portrait and landscape)",
                                                             style = MaterialTheme.typography.bodySmall,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1031,7 +1030,8 @@ class MainActivity : ComponentActivity() {
                                                             Text("Landscape position", modifier = Modifier.weight(1f))
                                                             TextButton(onClick = { landscapeMenuExpanded = true }, shapes = ButtonDefaults.shapes()) {
                                                                 Text(if (appLandscapePosition == "default") "Global default"
-                                                                    else appLandscapePosition.replaceFirstChar { it.uppercase() })
+                                                                    else PBarPositions.landscapeChoices.firstOrNull { it.first == appLandscapePosition }?.second
+                                                                        ?: "Global default")
                                                             }
                                                             DropdownMenu(expanded = landscapeMenuExpanded, onDismissRequest = { landscapeMenuExpanded = false }) {
                                                                 (listOf("default" to "Global default") + PBarPositions.landscapeChoices).forEach { (value, label) ->
@@ -1176,7 +1176,6 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun ProgressLinePreview(
-    orientation: String,
     position: String,
     thickness: Int,
     colour: ComposeColor,
@@ -1185,34 +1184,27 @@ private fun ProgressLinePreview(
     emphasiseProgress: Boolean,
     fraction: Float
 ) {
-    val vertical = orientation == "vertical"
     val lineShape = if (rounded) RoundedCornerShape(50) else RoundedCornerShape(0.dp)
-    val alignment = if (vertical) when (position) {
-        "right" -> Alignment.CenterEnd
-                else -> Alignment.CenterStart
-    } else if (PBarPositions.anchoredAtBottom(position)) Alignment.BottomCenter else Alignment.TopCenter
+    val alignment = if (PBarPositions.anchoredAtBottom(position)) Alignment.BottomCenter else Alignment.TopCenter
     Box(
         Modifier.fillMaxWidth().height(112.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
             .padding(12.dp)
     ) {
         Box(
-            (if (vertical) Modifier.fillMaxHeight().width(thickness.dp)
-             else Modifier.fillMaxWidth().height(thickness.dp))
+            Modifier.fillMaxWidth().height(thickness.dp)
                 .align(alignment).background(
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (emphasiseProgress) 0.12f else 0.24f), lineShape)
         ) {
             Box(
-                (if (vertical) Modifier.fillMaxWidth().fillMaxHeight(fraction.coerceIn(0f, 1f))
-                 else Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)))
-                    .align(if (vertical) Alignment.BottomCenter else Alignment.CenterStart)
+                Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f))
+                    .align(Alignment.CenterStart)
                     .background(colour.copy(alpha = opacity / 100f), lineShape)
             ) {
                 if (emphasiseProgress && fraction > 0f && fraction < 1f) {
                     Box(
-                        (if (vertical) Modifier.fillMaxWidth().height(2.dp)
-                         else Modifier.fillMaxHeight().width(2.dp))
-                            .align(if (vertical) Alignment.TopCenter else Alignment.CenterEnd)
+                        Modifier.fillMaxHeight().width(2.dp)
+                            .align(Alignment.CenterEnd)
                             .background(ComposeColor.White.copy(alpha = opacity / 100f))
                     )
                 }

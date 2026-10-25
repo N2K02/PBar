@@ -5,7 +5,7 @@ PBar is an Android progress overlay inspired by the idea of a quick-glance statu
 ## Features
 
 - Progress-bar line overlay only; circular ring mode has been removed.
-- Horizontal or vertical line placement, edge positioning, adjustable thickness, rounded ends, and opacity.
+- Horizontal progress line in both portrait and landscape, with independent top/bottom positions and safe offsets below the status bar or above a visible navigation bar, plus adjustable thickness, rounded ends, and opacity.
 - Automatic source notification colour, a custom global hex colour, and preset or custom hex colours per app.
 - Per-app customisation for orientation, position, thickness, and colour.
 - Per-app allow/ignore controls.
