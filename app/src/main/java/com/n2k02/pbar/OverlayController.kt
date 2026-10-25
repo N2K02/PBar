@@ -92,26 +92,25 @@ class OverlayController(private val host: Context) {
         }
         // Demo deliberately uses the global style, not an app-specific override.
         val sourcePackage = if (demoActive()) "" else prefs.getString("signal_package", "").orEmpty()
-        // The display itself determines line direction, never an app or user toggle.
-        val vertical = host.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        // Both portrait and landscape render a horizontal line, with their own positions.
+        val landscape = host.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
-        val defaultPosition = if (vertical) PBarPositions.LEFT else PBarPositions.TOP
-        val suffix = if (vertical) "landscape" else "portrait"
-        val globalRaw = prefs.getString("position_$suffix", prefs.getString("position", defaultPosition))
-        val globalPosition = if (vertical) PBarPositions.landscape(globalRaw) else PBarPositions.portrait(globalRaw)
+        val suffix = if (landscape) "landscape" else "portrait"
+        val globalRaw = prefs.getString("position_$suffix", prefs.getString("position", PBarPositions.TOP))
+        val globalPosition = if (landscape) PBarPositions.landscape(globalRaw) else PBarPositions.portrait(globalRaw)
         val appRaw = if (sourcePackage.isBlank()) null else prefs.getString(
             "app_${sourcePackage}_position_$suffix",
             prefs.getString("app_${sourcePackage}_position", globalPosition),
         )
-        val appPosition = if (appRaw == null) globalPosition else if (vertical)
+        val appPosition = if (appRaw == null) globalPosition else if (landscape)
             PBarPositions.landscape(appRaw, globalPosition) else PBarPositions.portrait(appRaw, globalPosition)
-        val (statusBarPx, navigationBarPx) = if (vertical) 0 to 0 else systemBarInsetsPx()
-        val offsetPx = if (vertical) 0 else PBarPositions.portraitOffsetPx(
+        val (statusBarPx, navigationBarPx) = systemBarInsetsPx()
+        val offsetPx = PBarPositions.horizontalOffsetPx(
             appPosition, statusBarPx, navigationBarPx,
         )
         val params = WindowManager.LayoutParams(
-            if (vertical) dp(thickness) else WindowManager.LayoutParams.MATCH_PARENT,
-            if (vertical) WindowManager.LayoutParams.MATCH_PARENT else dp(thickness),
+            WindowManager.LayoutParams.MATCH_PARENT,
+            dp(thickness),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -119,16 +118,10 @@ class OverlayController(private val host: Context) {
                 (if (prefs.getBoolean("show_on_lock_screen", false)) @Suppress("DEPRECATION") WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED else 0),
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = if (vertical) {
-                if (appPosition == PBarPositions.RIGHT)
-                    Gravity.RIGHT or Gravity.CENTER_VERTICAL else Gravity.LEFT or Gravity.CENTER_VERTICAL
-            } else {
-                if (PBarPositions.anchoredAtBottom(appPosition))
-                    Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            }
+            gravity = if (PBarPositions.anchoredAtBottom(appPosition))
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.TOP or Gravity.CENTER_HORIZONTAL
             x = 0
-            // Top and bottom edge mean the true display edge; safe choices use
-            // the measured, currently visible system-bar inset (0 when hidden).
+            // Edge choices sit at the display boundary; inset choices avoid currently visible bars.
             y = offsetPx
             if (Build.VERSION.SDK_INT >= 28) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
