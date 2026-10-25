@@ -213,6 +213,7 @@ class MainActivity : ComponentActivity() {
             when {
                 selectedApp != null -> selectedApp = null
                 tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN -> settingsPage = SettingsPage.MAIN
+                tab == Tab.STYLE || tab == Tab.APPS -> tab = Tab.SETTINGS
                 else -> tab = Tab.HOME
             }
         }
@@ -375,9 +376,7 @@ class MainActivity : ComponentActivity() {
                 bottomBar = {
                     NavigationBar {
                         NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.HomeRounded, null) }, label = { Text("Home") })
-                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Rounded.PaletteRounded, null) }, label = { Text("Appearance") })
-                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Rounded.TuneRounded, null) }, label = { Text("Apps") })
-                        NavigationBarItem(selected = tab == Tab.SETTINGS, onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS }, icon = { Icon(Icons.Rounded.SettingsRounded, null) }, label = { Text("Settings") })
+                        NavigationBarItem(selected = tab != Tab.HOME, onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS }, icon = { Icon(Icons.Rounded.SettingsRounded, null) }, label = { Text("Settings") })
                     }
                 }
             ) { padding ->
@@ -1072,6 +1071,27 @@ class MainActivity : ComponentActivity() {
                             when (settingsPage) {
                                 SettingsPage.MAIN -> {
                                     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                                        ListItem(
+                                            headlineContent = { Text("Appearance") },
+                                            supportingContent = { Text("Progress bar style and layout") },
+                                            leadingContent = { Icon(Icons.Rounded.PaletteRounded, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable { selectedApp = null; tab = Tab.STYLE },
+                                        )
+                                        HorizontalDivider()
+                                        ListItem(
+                                            headlineContent = { Text("Apps") },
+                                            supportingContent = { Text("Choose and customize tracked apps") },
+                                            leadingContent = { Icon(Icons.Rounded.TuneRounded, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable {
+                                                selectedApp = null
+                                                knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
+                                                ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
+                                                tab = Tab.APPS
+                                            },
+                                        )
+                                        HorizontalDivider()
                                         ListItem(
                                             headlineContent = { Text("Permissions") },
                                             supportingContent = {
