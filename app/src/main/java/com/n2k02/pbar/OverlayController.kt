@@ -95,15 +95,20 @@ class OverlayController(private val host: Context) {
         // The display itself determines line direction, never an app or user toggle.
         val vertical = host.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val thickness = prefs.getInt("app_${sourcePackage}_thickness", prefs.getInt("thickness", 4)).coerceIn(2, 12)
-        val allowedPositions = if (vertical) setOf("left", "center", "right") else setOf("top", "bottom")
-        val defaultPosition = if (vertical) "left" else "top"
+        val defaultPosition = if (vertical) PBarPositions.LEFT else PBarPositions.TOP
         val suffix = if (vertical) "landscape" else "portrait"
-        val globalPosition = prefs.getString("position_$suffix", prefs.getString("position", defaultPosition))
-            .takeIf { it in allowedPositions } ?: defaultPosition
-        val appPosition = if (sourcePackage.isBlank()) globalPosition else
-            prefs.getString("app_${sourcePackage}_position_$suffix",
-                prefs.getString("app_${sourcePackage}_position", globalPosition))
-                .takeIf { it in allowedPositions } ?: globalPosition
+        val globalRaw = prefs.getString("position_$suffix", prefs.getString("position", defaultPosition))
+        val globalPosition = if (vertical) PBarPositions.landscape(globalRaw) else PBarPositions.portrait(globalRaw)
+        val appRaw = if (sourcePackage.isBlank()) null else prefs.getString(
+            "app_${sourcePackage}_position_$suffix",
+            prefs.getString("app_${sourcePackage}_position", globalPosition),
+        )
+        val appPosition = if (appRaw == null) globalPosition else if (vertical)
+            PBarPositions.landscape(appRaw, globalPosition) else PBarPositions.portrait(appRaw, globalPosition)
+        val (statusBarPx, navigationBarPx) = if (vertical) 0 to 0 else systemBarInsetsPx()
+        val offsetPx = if (vertical) 0 else PBarPositions.portraitOffsetPx(
+            appPosition, statusBarPx, navigationBarPx,
+        )
         val params = WindowManager.LayoutParams(
             if (vertical) dp(thickness) else WindowManager.LayoutParams.MATCH_PARENT,
             if (vertical) WindowManager.LayoutParams.MATCH_PARENT else dp(thickness),
@@ -115,21 +120,16 @@ class OverlayController(private val host: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = if (vertical) {
-                when (appPosition) {
-                    "right" -> Gravity.RIGHT or Gravity.CENTER_VERTICAL
-                    "center" -> Gravity.CENTER
-                    else -> Gravity.LEFT or Gravity.CENTER_VERTICAL
-                }
+                if (appPosition == PBarPositions.RIGHT)
+                    Gravity.RIGHT or Gravity.CENTER_VERTICAL else Gravity.LEFT or Gravity.CENTER_VERTICAL
             } else {
-                when (appPosition) {
-                    "bottom" -> Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                }
+                if (PBarPositions.anchoredAtBottom(appPosition))
+                    Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.TOP or Gravity.CENTER_HORIZONTAL
             }
             x = 0
-            // Same placement as Noti: the line sits at the very top edge (behind the
-            // transparent status-bar window) instead of being pushed below it.
-            y = if (appPosition == "bottom") dp(12) else 0
+            // Top and bottom edge mean the true display edge; safe choices use
+            // the measured, currently visible system-bar inset (0 when hidden).
+            y = offsetPx
             if (Build.VERSION.SDK_INT >= 28) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
@@ -162,6 +162,36 @@ class OverlayController(private val host: Context) {
     private fun removeOverlay() {
         overlay?.let { runCatching { wm.removeView(it) } }
         overlay = null
+    }
+
+    /** Returns *visible* top/bottom system-bar insets, not permanent gesture margins. */
+    private fun systemBarInsetsPx(): Pair<Int, Int> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val measured = runCatching {
+                val windowInsets = wm.currentWindowMetrics.windowInsets
+                val status = windowInsets.getInsets(android.view.WindowInsets.Type.statusBars()).top
+                val nav = windowInsets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
+                status to nav
+            }.getOrNull()
+            if (measured != null) return measured
+        }
+        // API 26–29 fallback: use real-vs-app display bounds to avoid applying a
+        // navigation offset when the phone has no visible software navigation bar.
+        @Suppress("DEPRECATION")
+        val display = wm.defaultDisplay
+        val real = android.graphics.Point()
+        val usable = android.graphics.Point()
+        @Suppress("DEPRECATION")
+        display.getRealSize(real)
+        @Suppress("DEPRECATION")
+        display.getSize(usable)
+        val statusRes = host.resources.getIdentifier("status_bar_height", "dimen", "android")
+        val status = if (statusRes > 0) host.resources.getDimensionPixelSize(statusRes) else 0
+        val navRes = host.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        val navHeight = if (navRes > 0) host.resources.getDimensionPixelSize(navRes) else 0
+        val diff = (real.y - usable.y).coerceAtLeast(0)
+        val visibleNav = if (diff > status + dp(2)) navHeight else 0
+        return (if (diff >= status) status else 0) to visibleNav
     }
 
     private fun dp(value: Int) = (value * host.resources.displayMetrics.density).toInt()
