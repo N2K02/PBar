@@ -151,44 +151,19 @@ fun SettingsMenuButton(onOpenUpdates: () -> Unit) {
 /** Dedicated update page; the title is supplied by the app's top app bar. */
 @Composable
 fun UpdatesPage(modifier: Modifier = Modifier) {
-    val state by LiveUpdater.controller.status.collectAsState()
-    val experimentalEnabled by LiveUpdater.experimentalEnabled.collectAsState()
-    // Match MRadio's About & updates layout, without playback diagnostics.
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
-        androidx.compose.material3.ListItem(
-            headlineContent = { Text("PBar") },
-            supportingContent = { Text("Version " + BuildConfig.VERSION_NAME) },
-            leadingContent = {
-                androidx.compose.material3.Icon(
-                    androidx.compose.material.icons.Icons.Default.Info,
-                    contentDescription = null,
-                )
-            },
-        )
+    val experimental by LiveUpdater.experimentalEnabled.collectAsState()
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         androidx.compose.material3.ListItem(
             headlineContent = { Text("Experimental updates") },
-            supportingContent = {
-                Text("Offer signed APKs from successful pull request builds. Test builds may have bugs.")
-            },
+            supportingContent = { Text("Include test builds. Test builds may be unstable.") },
             trailingContent = {
-                Switch(
-                    checked = experimentalEnabled,
-                    onCheckedChange = LiveUpdater::setExperimentalEnabled,
-                )
-            },
-            modifier = Modifier.clickable {
-                LiveUpdater.setExperimentalEnabled(!experimentalEnabled)
+                Switch(checked = experimental, onCheckedChange = LiveUpdater::setExperimentalEnabled)
             },
         )
-        androidx.compose.material3.HorizontalDivider()
+        // The host Settings screen already owns vertical scrolling.
         dev.n2k02.updater.N2K02UpdateScreen(
             controller = LiveUpdater.controller,
             installGuard = LiveUpdater.installGuard,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
     }
 }
