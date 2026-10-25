@@ -152,18 +152,12 @@ fun SettingsMenuButton(onOpenUpdates: () -> Unit) {
 @Composable
 fun UpdatesPage(modifier: Modifier = Modifier) {
     val experimental by LiveUpdater.experimentalEnabled.collectAsState()
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        androidx.compose.material3.ListItem(
-            headlineContent = { Text("Experimental updates") },
-            supportingContent = { Text("Include test builds. Test builds may be unstable.") },
-            trailingContent = {
-                Switch(checked = experimental, onCheckedChange = LiveUpdater::setExperimentalEnabled)
-            },
-        )
-        // The host Settings screen already owns vertical scrolling.
-        dev.n2k02.updater.N2K02UpdateScreen(
-            controller = LiveUpdater.controller,
-            installGuard = LiveUpdater.installGuard,
-        )
-    }
+    // Host Settings owns vertical scroll and the top bar.
+    dev.n2k02.updater.N2K02UpdateScreen(
+        controller = LiveUpdater.controller,
+        installGuard = LiveUpdater.installGuard,
+        modifier = modifier,
+        experimentalEnabled = experimental,
+        onExperimentalEnabledChange = LiveUpdater::setExperimentalEnabled,
+    )
 }
