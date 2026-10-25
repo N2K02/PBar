@@ -377,6 +377,13 @@ class MainActivity : ComponentActivity() {
                     NavigationBar {
                         NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.HomeRounded, null) }, label = { Text("Home") })
                         NavigationBarItem(selected = tab != Tab.HOME, onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS }, icon = { Icon(Icons.Rounded.SettingsRounded, null) }, label = { Text("Settings") })
+                        NavigationBarItem(
+                            selected = false,
+                            onClick = { quitPBar() },
+                            icon = { Icon(Icons.Rounded.PowerSettingsNew, contentDescription = "Quit") },
+                            label = { Text("Quit") },
+                            alwaysShowLabel = true,
+                        )
                     }
                 }
             ) { padding ->
@@ -449,15 +456,6 @@ class MainActivity : ComponentActivity() {
                                         }
                                         }
                                 }
-                            }
-                            FilledTonalButton(
-                                onClick = { quitPBar() },
-                                modifier = Modifier.fillMaxWidth(),
-                                shapes = ButtonDefaults.shapes()
-                            ) {
-                                Icon(Icons.Rounded.PowerSettingsNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Quit PBar")
                             }
                         }
                         Tab.STYLE -> {
