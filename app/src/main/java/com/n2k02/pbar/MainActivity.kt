@@ -347,7 +347,9 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.size(24.dp)
                                     )
                                 }
-                                Text(
+                                if (tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES) {
+                                    dev.n2k02.updater.N2K02UpdateTitle()
+                                } else Text(
                                     if (selectedApp != null) "Customize app" else if (tab == Tab.SETTINGS) settingsPage.title else tab.label,
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.SemiBold
