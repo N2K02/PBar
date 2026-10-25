@@ -151,44 +151,12 @@ fun SettingsMenuButton(onOpenUpdates: () -> Unit) {
 /** Dedicated update page; the title is supplied by the app's top app bar. */
 @Composable
 fun UpdatesPage(modifier: Modifier = Modifier) {
-    val state by LiveUpdater.controller.status.collectAsState()
-    val experimentalEnabled by LiveUpdater.experimentalEnabled.collectAsState()
-    // Match MRadio's About & updates layout, without playback diagnostics.
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
-        androidx.compose.material3.ListItem(
-            headlineContent = { Text("PBar") },
-            supportingContent = { Text("Version " + BuildConfig.VERSION_NAME) },
-            leadingContent = {
-                androidx.compose.material3.Icon(
-                    androidx.compose.material.icons.Icons.Default.Info,
-                    contentDescription = null,
-                )
-            },
-        )
-        androidx.compose.material3.ListItem(
-            headlineContent = { Text("Experimental updates") },
-            supportingContent = {
-                Text("Offer signed APKs from successful pull request builds. Test builds may have bugs.")
-            },
-            trailingContent = {
-                Switch(
-                    checked = experimentalEnabled,
-                    onCheckedChange = LiveUpdater::setExperimentalEnabled,
-                )
-            },
-            modifier = Modifier.clickable {
-                LiveUpdater.setExperimentalEnabled(!experimentalEnabled)
-            },
-        )
-        androidx.compose.material3.HorizontalDivider()
-        dev.n2k02.updater.N2K02UpdateScreen(
-            controller = LiveUpdater.controller,
-            installGuard = LiveUpdater.installGuard,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-    }
+    val experimental by LiveUpdater.experimentalEnabled.collectAsState()
+    dev.n2k02.updater.N2K02UpdatePage(
+        controller = LiveUpdater.controller,
+        installGuard = LiveUpdater.installGuard,
+        modifier = modifier,
+        experimentalEnabled = experimental,
+        onExperimentalEnabledChange = LiveUpdater::setExperimentalEnabled,
+    )
 }
