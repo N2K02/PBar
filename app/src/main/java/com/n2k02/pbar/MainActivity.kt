@@ -51,12 +51,13 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.n2k02.theme.N2K02Theme
+import dev.n2k02.updater.hasPendingUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), SETTINGS("Settings") }
-private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("App updates") }
+private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("About & updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -132,6 +133,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun PBarApp() {
         val context = LocalContext.current
+        val updateStatus by LiveUpdater.controller.status.collectAsState()
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
@@ -162,14 +164,12 @@ class MainActivity : ComponentActivity() {
         // Keep independent edge positions when the device rotates.
         var portraitPosition by remember {
             mutableStateOf(
-                (prefs.getString("position_portrait", prefs.getString("position", "top")) ?: "top")
-                    .takeIf { it == "top" || it == "bottom" } ?: "top"
+                PBarPositions.portrait(prefs.getString("position_portrait", prefs.getString("position", "top")))
             )
         }
         var landscapePosition by remember {
             mutableStateOf(
-                (prefs.getString("position_landscape", prefs.getString("position", "left")) ?: "left")
-                    .takeIf { it == "left" || it == "center" || it == "right" } ?: "left"
+                PBarPositions.landscape(prefs.getString("position_landscape", prefs.getString("position", "left")))
             )
         }
         var thickness by remember { mutableIntStateOf(prefs.getInt("thickness", 4).coerceIn(2, 12)) }
@@ -213,6 +213,7 @@ class MainActivity : ComponentActivity() {
             when {
                 selectedApp != null -> selectedApp = null
                 tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN -> settingsPage = SettingsPage.MAIN
+                tab == Tab.STYLE || tab == Tab.APPS -> tab = Tab.SETTINGS
                 else -> tab = Tab.HOME
             }
         }
@@ -334,35 +335,26 @@ class MainActivity : ComponentActivity() {
                     TopAppBar(
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                if (selectedApp == null && !(tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN)) {
-                                    Icon(
-                                        when (tab) {
-                                            Tab.HOME -> Icons.Rounded.HomeRounded
-                                            Tab.STYLE -> Icons.Rounded.PaletteRounded
-                                            Tab.APPS -> Icons.Rounded.TuneRounded
-                                            Tab.SETTINGS -> Icons.Rounded.SettingsRounded
-                                        },
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                if (tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES) {
-                                    dev.n2k02.updater.N2K02UpdateTitle()
-                                } else Text(
+                                Icon(
+                                    when {
+                                        selectedApp != null -> Icons.Rounded.TuneRounded
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES -> Icons.Rounded.SystemUpdateRounded
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.PERMISSIONS -> Icons.Rounded.Security
+                                        tab == Tab.STYLE -> Icons.Rounded.PaletteRounded
+                                        tab == Tab.APPS -> Icons.Rounded.TuneRounded
+                                        tab == Tab.SETTINGS -> Icons.Rounded.SettingsRounded
+                                        else -> Icons.Rounded.HomeRounded
+                                    },
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Text(
                                     if (selectedApp != null) "Customize app" else if (tab == Tab.SETTINGS) settingsPage.title else tab.label,
                                     style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
                                 )
-                            }
-                        },
-                        navigationIcon = {
-                            if (selectedApp != null || (tab == Tab.SETTINGS && settingsPage != SettingsPage.MAIN)) {
-                                IconButton(onClick = {
-                                    if (selectedApp != null) selectedApp = null else settingsPage = SettingsPage.MAIN
-                                }) {
-                                    Icon(Icons.Rounded.ArrowBack, contentDescription = if (selectedApp != null) "Back to apps" else "Back to Settings")
-                                }
                             }
                         },
                         actions = {
@@ -373,6 +365,8 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 if (pbarIcon != null) {
                                     Image(bitmap = pbarIcon, contentDescription = null, modifier = Modifier.size(26.dp))
+                                } else {
+                                    dev.n2k02.updater.N2K02AppIcon(Modifier.size(26.dp))
                                 }
                                 Text("PBar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             }
@@ -382,17 +376,31 @@ class MainActivity : ComponentActivity() {
                 bottomBar = {
                     NavigationBar {
                         NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.HomeRounded, null) }, label = { Text("Home") })
-                        NavigationBarItem(selected = tab == Tab.STYLE, onClick = { selectedApp = null; tab = Tab.STYLE }, icon = { Icon(Icons.Rounded.PaletteRounded, null) }, label = { Text("Appearance") })
-                        NavigationBarItem(selected = tab == Tab.APPS, onClick = { selectedApp = null; tab = Tab.APPS; knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet(); ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet(); appColorOverrides = prefs.getStringSet("app_color_overrides", emptySet()).orEmpty().mapNotNull { entry -> val split = entry.split("=", limit = 2); if (split.size == 2) split[0] to split[1] else null }.toMap() }, icon = { Icon(Icons.Rounded.TuneRounded, null) }, label = { Text("Apps") })
-                        NavigationBarItem(selected = tab == Tab.SETTINGS, onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS }, icon = { Icon(Icons.Rounded.SettingsRounded, null) }, label = { Text("Settings") })
+                        NavigationBarItem(
+                            selected = tab != Tab.HOME,
+                            onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS },
+                            icon = {
+                                dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) {
+                                    Icon(Icons.Rounded.SettingsRounded, contentDescription = "Settings")
+                                }
+                            },
+                            label = { Text("Settings") },
+                        )
+                        NavigationBarItem(
+                            selected = false,
+                            onClick = { quitPBar() },
+                            icon = { Icon(Icons.Rounded.PowerSettingsNew, contentDescription = "Quit") },
+                            label = { Text("Quit") },
+                            alwaysShowLabel = true,
+                        )
                     }
                 }
             ) { padding ->
                 Column(
                     Modifier.fillMaxSize().padding(padding)
                         .then(if (tab == Tab.APPS && selectedApp == null) Modifier else Modifier.verticalScroll(rememberScrollState()))
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(if (tab == Tab.SETTINGS) 12.dp else 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (tab == Tab.SETTINGS) 4.dp else 12.dp)
                 ) {
                     when (tab) {
                         Tab.HOME -> {
@@ -458,15 +466,6 @@ class MainActivity : ComponentActivity() {
                                         }
                                 }
                             }
-                            FilledTonalButton(
-                                onClick = { quitPBar() },
-                                modifier = Modifier.fillMaxWidth(),
-                                shapes = ButtonDefaults.shapes()
-                            ) {
-                                Icon(Icons.Rounded.PowerSettingsNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Quit PBar")
-                            }
                         }
                         Tab.STYLE -> {
                             ElevatedCard(Modifier.fillMaxWidth()) {
@@ -519,7 +518,7 @@ class MainActivity : ComponentActivity() {
                                         if (overlayEnabled) refreshOverlay()
                                     }, valueRange = 2f..12f, steps = 9)
                                     Text("Portrait position", style = MaterialTheme.typography.titleMedium)
-                                    listOf("top" to "Top edge", "bottom" to "Bottom edge").forEach { (value, label) ->
+                                    PBarPositions.portraitChoices.forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             RadioButton(selected = portraitPosition == value, onClick = {
                                                 portraitPosition = value
@@ -530,7 +529,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     Text("Landscape position", style = MaterialTheme.typography.titleMedium)
-                                    listOf("left" to "Left edge", "center" to "Centre", "right" to "Right edge").forEach { (value, label) ->
+                                    PBarPositions.landscapeChoices.forEach { (value, label) ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             RadioButton(selected = landscapePosition == value, onClick = {
                                                 landscapePosition = value
@@ -922,16 +921,20 @@ class MainActivity : ComponentActivity() {
                                                     var appStyle by remember(packageName) { mutableStateOf(prefs.getString("app_${packageName}_style", "default") ?: "default") }
                                                     var appPortraitPosition by remember(packageName) {
                                                         mutableStateOf(
-                                                            prefs.getString("app_${packageName}_position_portrait",
-                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
-                                                                .takeIf { it == "top" || it == "bottom" } ?: "default"
+                                                            PBarPositions.portrait(
+                                                                prefs.getString("app_${packageName}_position_portrait",
+                                                                    prefs.getString("app_${packageName}_position", "default")),
+                                                                fallback = "default",
+                                                            )
                                                         )
                                                     }
                                                     var appLandscapePosition by remember(packageName) {
                                                         mutableStateOf(
-                                                            prefs.getString("app_${packageName}_position_landscape",
-                                                                prefs.getString("app_${packageName}_position", "default")).orEmpty()
-                                                                .takeIf { it == "left" || it == "center" || it == "right" } ?: "default"
+                                                            PBarPositions.landscape(
+                                                                prefs.getString("app_${packageName}_position_landscape",
+                                                                    prefs.getString("app_${packageName}_position", "default")),
+                                                                fallback = "default",
+                                                            )
                                                         )
                                                     }
                                                     var appCustomHex by remember(packageName) { mutableStateOf(appColorOverrides[packageName] ?: "") }
@@ -1010,7 +1013,7 @@ class MainActivity : ComponentActivity() {
                                                                     else appPortraitPosition.replaceFirstChar { it.uppercase() })
                                                             }
                                                             DropdownMenu(expanded = portraitMenuExpanded, onDismissRequest = { portraitMenuExpanded = false }) {
-                                                                listOf("default" to "Global default", "top" to "Top", "bottom" to "Bottom").forEach { (value, label) ->
+                                                                (listOf("default" to "Global default") + PBarPositions.portraitChoices).forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appPortraitPosition = value
                                                                         val edit = prefs.edit()
@@ -1031,7 +1034,7 @@ class MainActivity : ComponentActivity() {
                                                                     else appLandscapePosition.replaceFirstChar { it.uppercase() })
                                                             }
                                                             DropdownMenu(expanded = landscapeMenuExpanded, onDismissRequest = { landscapeMenuExpanded = false }) {
-                                                                listOf("default" to "Global default", "left" to "Left", "center" to "Centre", "right" to "Right").forEach { (value, label) ->
+                                                                (listOf("default" to "Global default") + PBarPositions.landscapeChoices).forEach { (value, label) ->
                                                                     DropdownMenuItem(text = { Text(label) }, onClick = {
                                                                         appLandscapePosition = value
                                                                         val edit = prefs.edit()
@@ -1078,7 +1081,32 @@ class MainActivity : ComponentActivity() {
                         Tab.SETTINGS -> {
                             when (settingsPage) {
                                 SettingsPage.MAIN -> {
-                                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            "Make PBar your own",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 12.dp),
+                                        )
+                                        ListItem(
+                                            headlineContent = { Text("Appearance") },
+                                            supportingContent = { Text("Progress bar style and layout") },
+                                            leadingContent = { Icon(Icons.Rounded.PaletteRounded, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable { selectedApp = null; tab = Tab.STYLE },
+                                        )
+                                        ListItem(
+                                            headlineContent = { Text("Apps") },
+                                            supportingContent = { Text("Choose and customize tracked apps") },
+                                            leadingContent = { Icon(Icons.Rounded.TuneRounded, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable {
+                                                selectedApp = null
+                                                knownPackages = prefs.getStringSet("known_packages", emptySet())?.toSet() ?: emptySet()
+                                                ignoredPackages = prefs.getStringSet("ignored_packages", emptySet())?.toSet() ?: emptySet()
+                                                tab = Tab.APPS
+                                            },
+                                        )
                                         ListItem(
                                             headlineContent = { Text("Permissions") },
                                             supportingContent = {
@@ -1090,10 +1118,13 @@ class MainActivity : ComponentActivity() {
                                         )
                                         HorizontalDivider()
                                         ListItem(
-                                            headlineContent = { Text("App updates") },
-                                            supportingContent = { Text("Version ${BuildConfig.VERSION_NAME} · update options") },
+                                            headlineContent = { Text("About & updates") },
+                                            supportingContent = {
+                                                Text(if (updateStatus.hasPendingUpdate()) "A new update is available"
+                                                    else "Version ${BuildConfig.VERSION_NAME} · update options")
+                                            },
                                             leadingContent = { Icon(Icons.Rounded.SystemUpdateRounded, contentDescription = null) },
-                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) },
                                             modifier = Modifier.clickable { settingsPage = SettingsPage.APP_UPDATES }
                                         )
                                     }
@@ -1158,9 +1189,8 @@ private fun ProgressLinePreview(
     val lineShape = if (rounded) RoundedCornerShape(50) else RoundedCornerShape(0.dp)
     val alignment = if (vertical) when (position) {
         "right" -> Alignment.CenterEnd
-        "center" -> Alignment.Center
-        else -> Alignment.CenterStart
-    } else if (position == "bottom") Alignment.BottomCenter else Alignment.TopCenter
+                else -> Alignment.CenterStart
+    } else if (PBarPositions.anchoredAtBottom(position)) Alignment.BottomCenter else Alignment.TopCenter
     Box(
         Modifier.fillMaxWidth().height(112.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
