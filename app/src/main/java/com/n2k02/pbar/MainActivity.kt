@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.n2k02.theme.N2K02Theme
+import dev.n2k02.updater.hasPendingUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -132,6 +133,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun PBarApp() {
         val context = LocalContext.current
+        val updateStatus by LiveUpdater.controller.status.collectAsState()
         val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
@@ -374,7 +376,16 @@ class MainActivity : ComponentActivity() {
                 bottomBar = {
                     NavigationBar {
                         NavigationBarItem(selected = tab == Tab.HOME, onClick = { selectedApp = null; tab = Tab.HOME }, icon = { Icon(Icons.Rounded.HomeRounded, null) }, label = { Text("Home") })
-                        NavigationBarItem(selected = tab != Tab.HOME, onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS }, icon = { Icon(Icons.Rounded.SettingsRounded, null) }, label = { Text("Settings") })
+                        NavigationBarItem(
+                            selected = tab != Tab.HOME,
+                            onClick = { selectedApp = null; settingsPage = SettingsPage.MAIN; tab = Tab.SETTINGS },
+                            icon = {
+                                dev.n2k02.updater.N2K02UpdateBadgedIcon(updateStatus) {
+                                    Icon(Icons.Rounded.SettingsRounded, contentDescription = "Settings")
+                                }
+                            },
+                            label = { Text("Settings") },
+                        )
                         NavigationBarItem(
                             selected = false,
                             onClick = { quitPBar() },
@@ -1108,9 +1119,12 @@ class MainActivity : ComponentActivity() {
                                         HorizontalDivider()
                                         ListItem(
                                             headlineContent = { Text("About & updates") },
-                                            supportingContent = { Text("Version ${BuildConfig.VERSION_NAME} · update options") },
+                                            supportingContent = {
+                                                Text(if (updateStatus.hasPendingUpdate()) "A new update is available"
+                                                    else "Version ${BuildConfig.VERSION_NAME} · update options")
+                                            },
                                             leadingContent = { Icon(Icons.Rounded.SystemUpdateRounded, contentDescription = null) },
-                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) },
                                             modifier = Modifier.clickable { settingsPage = SettingsPage.APP_UPDATES }
                                         )
                                     }
