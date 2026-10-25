@@ -26,6 +26,23 @@ class PageHeaderContractTest {
         assertTrue("Missing application name in header", header.contains("Text(\"PBar\""))
     }
 
+    @Test fun quitIsOnlyInBottomBarToTheRightOfSettings() {
+        val text = source()
+        val header = text.substringAfter("topBar = {").substringBefore("bottomBar = {")
+        val bar = text.substringAfter("bottomBar = {").substringBefore(") { padding ->")
+        val home = text.substringAfter("Tab.HOME -> {").substringBefore("Tab.STYLE -> {")
+        assertFalse("No quit action in header", header.contains("quitPBar()"))
+        assertFalse("Home must not include an extra Quit PBar button", home.contains("Quit PBar"))
+        assertTrue("Quit item must be in bottom navigation", bar.contains("label = { Text(\"Quit\") }"))
+        assertTrue("Quit must follow Settings", bar.indexOf("label = { Text(\"Quit\") }") >
+            bar.indexOf("label = { Text(\"Settings\") }"))
+        assertTrue("Quit must retain shutdown semantics", bar.contains("onClick = { quitPBar() }"))
+        val shutdown = text.substringAfter("private fun quitPBar()").substringBefore("@OptIn(ExperimentalMaterial3Api")
+        assertTrue(shutdown.contains("putBoolean(\"overlay_enabled\", false)"))
+        assertTrue(shutdown.contains("refreshOverlay()"))
+        assertTrue(shutdown.contains("finishAndRemoveTask()"))
+    }
+
     @Test fun appTitleIsNotProvidedBySharedUpdater() {
         val header = source().substringAfter("topBar = {")
             .substringBefore("bottomBar = {")
