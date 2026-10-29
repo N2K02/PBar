@@ -114,7 +114,12 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         LiveUpdater.onResume(this)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        prefs.edit().putBoolean("overlay_enabled", true).apply()
+        val resumedAfterQuit = prefs.getBoolean("quit_requested", false)
+        prefs.edit().putBoolean("quit_requested", false).putBoolean("overlay_enabled", true).apply()
+        if (resumedAfterQuit) runCatching {
+            android.service.notification.NotificationListenerService.requestRebind(
+                ComponentName(this, ProgressNotificationListener::class.java))
+        }
         if (Settings.canDrawOverlays(this)) {
             refreshOverlay()
         }
@@ -126,8 +131,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun quitPBar() {
-        getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("overlay_enabled", false).apply()
-        refreshOverlay()
+        // Persist before the OS-managed listener receives the Quit broadcast.
+        getSharedPreferences("pbar", MODE_PRIVATE).edit()
+            .putBoolean("quit_requested", true)
+            .putBoolean("overlay_enabled", false).commit()
+        sendBroadcast(Intent(ProgressNotificationListener.ACTION_QUIT).setPackage(packageName))
+        LiveUpdater.controller.cancel()
         finishAndRemoveTask()
     }
 
