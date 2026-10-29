@@ -51,6 +51,8 @@ class OverlayController(private val host: Context) {
 
     /** Start listening for signal/fullscreen/screen events and draw the current state. */
     fun start() {
+        AppLog.init(host.applicationContext)
+        AppLog.add("OVERLAY", "LISTENER_STARTED")
         if (!receiverRegistered) {
             val filter = IntentFilter().apply {
                 addAction(ProgressNotificationListener.ACTION_SIGNAL)
@@ -70,6 +72,7 @@ class OverlayController(private val host: Context) {
 
     /** Stop listening and take the bar off screen. */
     fun stop() {
+        AppLog.add("OVERLAY", "LISTENER_STOPPED")
         if (receiverRegistered) {
             runCatching { host.unregisterReceiver(receiver) }
             receiverRegistered = false
@@ -140,7 +143,10 @@ class OverlayController(private val host: Context) {
                 (Build.VERSION.SDK_INT < 28 ||
                     old.layoutInDisplayCutoutMode == params.layoutInDisplayCutoutMode)) return
             val updated = runCatching { wm.updateViewLayout(current, params) }
-                .onFailure { Log.w(TAG, "updateViewLayout failed; recreating overlay", it) }
+                .onFailure {
+                    AppLog.add("OVERLAY", "LAYOUT_UPDATE_FAILED")
+                    Log.w(TAG, "updateViewLayout failed; recreating overlay", it)
+                }
                 .isSuccess
             if (updated) return
             // Fall through and add a fresh view instead of leaving the bar gone.
@@ -149,7 +155,10 @@ class OverlayController(private val host: Context) {
         val view = IndicatorView(host).apply { updateFrom(prefs) }
         runCatching { wm.addView(view, params) }
             .onSuccess { overlay = view }
-            .onFailure { Log.e(TAG, "addView failed", it) }
+            .onFailure {
+                AppLog.add("OVERLAY", "ATTACH_FAILED")
+                Log.e(TAG, "addView failed", it)
+            }
     }
 
     private fun removeOverlay() {
