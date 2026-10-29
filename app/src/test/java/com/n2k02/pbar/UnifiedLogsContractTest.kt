@@ -15,7 +15,13 @@ class UnifiedLogsContractTest {
         assertTrue(main.contains("AppLog.init(applicationContext)"))
         assertFalse(main.contains("LogsActivity::class.java"))
         assertFalse(manifest.contains("LogsActivity"))
-        listOf("followLatest", "Text(\"Prev\")", "Text(\"Next\")", "Text(\"Copy\")",
-            "Text(\"Clear all\")", "Switch(checked = enabled").forEach { assertTrue(it, logs.contains(it)) }
+        listOf("followLatest", "Text(\"Prev\",", "Text(\"Next\",", "Text(\"Copy\",",
+            "Text(\"Clear all\",", "Switch(checked = enabled").forEach { assertTrue(it, logs.contains(it)) }
+        assertTrue(logs.contains("Icons.Filled.ContentCopy"))
+        assertTrue(logs.contains("Icons.Filled.DeleteSweep"))
+        assertTrue(logs.contains("Icons.AutoMirrored.Filled.KeyboardArrowLeft"))
+        assertTrue(logs.contains("Icons.AutoMirrored.Filled.KeyboardArrowRight"))
+        assertTrue(logs.contains("horizontalArrangement = Arrangement.SpaceBetween"))
+        assertFalse(logs.contains("Text(\"Back\")"))
     }
 }
