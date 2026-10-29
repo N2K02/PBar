@@ -1117,6 +1117,15 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.clickable { settingsPage = SettingsPage.PERMISSIONS }
                                         )
                                         HorizontalDivider()
+                                        val logScreenContext = androidx.compose.ui.platform.LocalContext.current
+                                        ListItem(
+                                            headlineContent = { Text("Logs") },
+                                            supportingContent = { Text("Private diagnostic and crash history") },
+                                            modifier = Modifier.clickable {
+                                                val app = logScreenContext
+                                                app.startActivity(android.content.Intent(app, com.n2k02.pbar.LogsActivity::class.java))
+                                            },
+                                        )
                                         ListItem(
                                             headlineContent = { Text("About & updates") },
                                             supportingContent = {
