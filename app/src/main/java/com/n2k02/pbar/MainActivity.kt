@@ -340,7 +340,7 @@ class MainActivity : ComponentActivity() {
                                         selectedApp != null -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES -> Icons.Rounded.SystemUpdateRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.PERMISSIONS -> Icons.Rounded.Security
-                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS -> Icons.Rounded.Article
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS -> Icons.Rounded.SettingsRounded
                                         tab == Tab.STYLE -> Icons.Rounded.PaletteRounded
                                         tab == Tab.APPS -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS -> Icons.Rounded.SettingsRounded
@@ -1128,7 +1128,7 @@ class MainActivity : ComponentActivity() {
                                         ListItem(
                                             headlineContent = { Text("Logs") },
                                             supportingContent = { Text("Private diagnostic and crash history") },
-                                            leadingContent = { Icon(Icons.Rounded.Article, null) },
+                                            leadingContent = { Icon(Icons.Rounded.SettingsRounded, null) },
                                             modifier = Modifier.clickable { settingsPage = SettingsPage.LOGS },
                                         )
                                         ListItem(
