@@ -4,6 +4,6 @@ import androidx.compose.ui.Modifier
 
 /** Uses the existing PBar Settings header and shared n2k02theme. */
 @Composable
-internal fun PBarLogsPage(modifier: Modifier = Modifier, onBack: () -> Unit) {
+internal fun PBarLogsPage(modifier: Modifier = Modifier) {
     N2K02UnifiedLogsPage(modifier = modifier, appName = "PBar")
 }
