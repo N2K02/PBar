@@ -39,7 +39,8 @@ class PageHeaderContractTest {
         assertTrue("Quit must retain shutdown semantics", bar.contains("onClick = { quitPBar() }"))
         val shutdown = text.substringAfter("private fun quitPBar()").substringBefore("@OptIn(ExperimentalMaterial3Api")
         assertTrue(shutdown.contains("putBoolean(\"overlay_enabled\", false)"))
-        assertTrue(shutdown.contains("refreshOverlay()"))
+        assertTrue(shutdown.contains("ACTION_QUIT"))
+        assertTrue(shutdown.contains("LiveUpdater.controller.cancel()"))
         assertTrue(shutdown.contains("finishAndRemoveTask()"))
     }
 
