@@ -35,4 +35,12 @@ class UnifiedLogsContractTest {
             LogEventOrdering.merge(saved, activity, "2026-10-29"))
     }
 
+    @Test fun activityLogsCoverStartStopAndFailures() {
+        val path = "app/src/main/java/com/n2k02/pbar/OverlayController.kt"
+        val activity = listOf(File(path), File("../$path")).first { it.isFile }.readText()
+        assertTrue(activity.contains("LISTENER_STARTED"))
+        assertTrue(activity.contains("LISTENER_STOPPED"))
+        assertTrue(activity.contains("ATTACH_FAILED"))
+    }
+
 }
