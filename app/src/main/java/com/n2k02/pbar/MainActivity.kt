@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Article
 import androidx.compose.material.icons.rounded.Home as HomeRounded
 import androidx.compose.material.icons.rounded.Palette as PaletteRounded
 import androidx.compose.material.icons.rounded.Tune as TuneRounded
@@ -340,7 +341,7 @@ class MainActivity : ComponentActivity() {
                                         selectedApp != null -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES -> Icons.Rounded.SystemUpdateRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.PERMISSIONS -> Icons.Rounded.Security
-                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS -> Icons.Rounded.SettingsRounded
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS -> Icons.Rounded.Article
                                         tab == Tab.STYLE -> Icons.Rounded.PaletteRounded
                                         tab == Tab.APPS -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS -> Icons.Rounded.SettingsRounded
@@ -1127,7 +1128,7 @@ class MainActivity : ComponentActivity() {
                                         ListItem(
                                             headlineContent = { Text("Logs") },
                                             supportingContent = { Text("Private diagnostic and crash history") },
-                                            leadingContent = { Icon(Icons.Rounded.SettingsRounded, null) },
+                                            leadingContent = { Icon(Icons.Rounded.Article, null) },
                                             modifier = Modifier.clickable { settingsPage = SettingsPage.LOGS },
                                         )
                                         ListItem(
