@@ -400,7 +400,6 @@ class MainActivity : ComponentActivity() {
                 if (tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS) {
                     PBarLogsPage(
                         modifier = Modifier.fillMaxSize().padding(padding),
-                        onBack = { settingsPage = SettingsPage.MAIN },
                     )
                 } else {
                 Column(
