@@ -23,5 +23,7 @@ class UnifiedLogsContractTest {
         assertTrue(logs.contains("Icons.AutoMirrored.Filled.KeyboardArrowRight"))
         assertTrue(logs.contains("horizontalArrangement = Arrangement.SpaceBetween"))
         assertFalse(logs.contains("Text(\"Back\")"))
+        assertTrue(main.contains("settingsPage == SettingsPage.LOGS -> Icons.Rounded.Article"))
+        assertTrue(main.contains("leadingContent = { Icon(Icons.Rounded.Article, null) }"))
     }
 }
