@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Article
 import androidx.compose.material.icons.rounded.Home as HomeRounded
 import androidx.compose.material.icons.rounded.Palette as PaletteRounded
 import androidx.compose.material.icons.rounded.Tune as TuneRounded
@@ -57,12 +58,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), SETTINGS("Settings") }
-private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("About & updates") }
+private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), LOGS("Logs"), APP_UPDATES("About & updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LiveUpdater.init(this)
+        AppLog.init(applicationContext)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         // Only initialize the app allowlist for new installs. Existing preferences,
         // including apps users have enabled or disabled themselves, are untouched.
@@ -339,6 +341,7 @@ class MainActivity : ComponentActivity() {
                                         selectedApp != null -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES -> Icons.Rounded.SystemUpdateRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.PERMISSIONS -> Icons.Rounded.Security
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS -> Icons.Rounded.Article
                                         tab == Tab.STYLE -> Icons.Rounded.PaletteRounded
                                         tab == Tab.APPS -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS -> Icons.Rounded.SettingsRounded
@@ -395,6 +398,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             ) { padding ->
+                if (tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS) {
+                    PBarLogsPage(
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                    )
+                } else {
                 Column(
                     Modifier.fillMaxSize().padding(padding)
                         .then(if (tab == Tab.APPS && selectedApp == null) Modifier else Modifier.verticalScroll(rememberScrollState()))
@@ -1118,6 +1126,12 @@ class MainActivity : ComponentActivity() {
                                         )
                                         HorizontalDivider()
                                         ListItem(
+                                            headlineContent = { Text("Logs") },
+                                            supportingContent = { Text("Private diagnostic and crash history") },
+                                            leadingContent = { Icon(Icons.Rounded.Article, null) },
+                                            modifier = Modifier.clickable { settingsPage = SettingsPage.LOGS },
+                                        )
+                                        ListItem(
                                             headlineContent = { Text("About & updates") },
                                             supportingContent = {
                                                 Text(if (updateStatus.hasPendingUpdate()) "A new update is available"
@@ -1164,11 +1178,13 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
+                                SettingsPage.LOGS -> Unit // Rendered directly under the app Scaffold.
                                 SettingsPage.APP_UPDATES -> UpdatesPage()
                             }
                         }
                     }
                 }
+                } // End non-Logs content.
             }
         }
     }

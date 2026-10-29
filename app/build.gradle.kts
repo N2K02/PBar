@@ -14,14 +14,14 @@ android {
     defaultConfig {
         applicationId = "com.n2k02.pbar"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 37
         versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: versionCodeValue
         versionName = appVersion + ((findProperty("appVersionSuffix") as String?) ?: "")
     }
 
     buildTypes {
-        release { isMinifyEnabled = false }
-        debug { applicationIdSuffix = ".debug"; versionNameSuffix = "-debug" }
+        release { isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+        debug { versionNameSuffix = "-debug" }
     }
 
     compileOptions {
