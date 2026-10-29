@@ -1,6 +1,7 @@
 package com.n2k02.pbar
 import java.io.File
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 class UnifiedLogsContractTest {
@@ -26,4 +27,12 @@ class UnifiedLogsContractTest {
         assertTrue(main.contains("settingsPage == SettingsPage.LOGS -> Icons.Rounded.Article"))
         assertTrue(main.contains("leadingContent = { Icon(Icons.Rounded.Article, null) }"))
     }
+    @Test fun olderAndLiveLogsAreInterleavedByTimestamp() {
+        val saved = listOf("2026-10-28 23:59:58.000 [UI] old",
+            "2026-10-29 10:00:02.001 [LOG] later")
+        val activity = listOf("[activity] 10:00:01 event")
+        assertEquals(listOf(saved[0], activity[0], saved[1]),
+            LogEventOrdering.merge(saved, activity, "2026-10-29"))
+    }
+
 }
