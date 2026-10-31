@@ -58,7 +58,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), SETTINGS("Settings") }
-private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), LOGS("Logs"), APP_UPDATES("About & updates") }
+private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("About & updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,7 +114,12 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         LiveUpdater.onResume(this)
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-        prefs.edit().putBoolean("overlay_enabled", true).apply()
+        val resumedAfterQuit = prefs.getBoolean("quit_requested", false)
+        prefs.edit().putBoolean("quit_requested", false).putBoolean("overlay_enabled", true).apply()
+        if (resumedAfterQuit) runCatching {
+            android.service.notification.NotificationListenerService.requestRebind(
+                ComponentName(this, ProgressNotificationListener::class.java))
+        }
         if (Settings.canDrawOverlays(this)) {
             refreshOverlay()
         }
@@ -126,8 +131,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun quitPBar() {
-        getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("overlay_enabled", false).apply()
-        refreshOverlay()
+        // Persist before the OS-managed listener receives the Quit broadcast.
+        getSharedPreferences("pbar", MODE_PRIVATE).edit()
+            .putBoolean("quit_requested", true)
+            .putBoolean("overlay_enabled", false).commit()
+        sendBroadcast(Intent(ProgressNotificationListener.ACTION_QUIT).setPackage(packageName))
+        LiveUpdater.controller.cancel()
         finishAndRemoveTask()
     }
 
@@ -341,7 +350,6 @@ class MainActivity : ComponentActivity() {
                                         selectedApp != null -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES -> Icons.Rounded.SystemUpdateRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.PERMISSIONS -> Icons.Rounded.Security
-                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS -> Icons.Rounded.Article
                                         tab == Tab.STYLE -> Icons.Rounded.PaletteRounded
                                         tab == Tab.APPS -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS -> Icons.Rounded.SettingsRounded
@@ -398,11 +406,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             ) { padding ->
-                if (tab == Tab.SETTINGS && settingsPage == SettingsPage.LOGS) {
-                    PBarLogsPage(
-                        modifier = Modifier.fillMaxSize().padding(padding),
-                    )
-                } else {
+                run {
                 Column(
                     Modifier.fillMaxSize().padding(padding)
                         .then(if (tab == Tab.APPS && selectedApp == null) Modifier else Modifier.verticalScroll(rememberScrollState()))
@@ -1125,12 +1129,7 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.clickable { settingsPage = SettingsPage.PERMISSIONS }
                                         )
                                         HorizontalDivider()
-                                        ListItem(
-                                            headlineContent = { Text("Logs") },
-                                            supportingContent = { Text("Private diagnostic and crash history") },
-                                            leadingContent = { Icon(Icons.Rounded.Article, null) },
-                                            modifier = Modifier.clickable { settingsPage = SettingsPage.LOGS },
-                                        )
+                                        
                                         ListItem(
                                             headlineContent = { Text("About & updates") },
                                             supportingContent = {
@@ -1178,13 +1177,12 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
-                                SettingsPage.LOGS -> Unit // Rendered directly under the app Scaffold.
                                 SettingsPage.APP_UPDATES -> UpdatesPage()
                             }
                         }
                     }
                 }
-                } // End non-Logs content.
+                } // End Settings content.
             }
         }
     }

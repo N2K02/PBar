@@ -13,7 +13,6 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
-        <provider android:name="com.n2k02.pbar.CrashJournalProvider" android:authorities="${applicationId}.crashjournal" android:exported="false" android:initOrder="100" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

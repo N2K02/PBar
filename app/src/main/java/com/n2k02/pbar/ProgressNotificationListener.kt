@@ -54,8 +54,13 @@ class ProgressNotificationListener : NotificationListenerService() {
     private var refreshReceiverRegistered = false
     private val refreshReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            // Sent by the "Refresh status" button: re-query sessions now so stale values clear.
-            if (::mediaSessions.isInitialized) refreshMediaSessions(currentMediaControllers())
+            if (intent?.action == ACTION_QUIT) {
+                stopForQuit()
+                return
+            }
+            // Sent by "Refresh status"; never resume timers after explicit Quit.
+            if (!isQuitRequested() && ::mediaSessions.isInitialized)
+                refreshMediaSessions(currentMediaControllers())
         }
     }
     private val progressTicker = object : Runnable {
@@ -68,6 +73,7 @@ class ProgressNotificationListener : NotificationListenerService() {
 
     /** Coalesces bursts of events (callbacks, ranking updates) into a single session query. */
     private fun requestRefresh() {
+        if (isQuitRequested()) return
         progressHandler.removeCallbacks(refreshRunnable)
         progressHandler.postDelayed(refreshRunnable, 50L)
     }
@@ -76,7 +82,30 @@ class ProgressNotificationListener : NotificationListenerService() {
         refreshMediaSessions((controllers.orEmpty() + notificationControllers.values).distinctBy { it.sessionToken })
     }
 
+    private fun isQuitRequested(): Boolean =
+        getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("quit_requested", false)
+
+    /** Stop OS-managed callbacks and detach until the user reopens PBar. */
+    private fun stopForQuit() {
+        progressHandler.removeCallbacksAndMessages(null)
+        timerHandler.removeCallbacksAndMessages(null)
+        unregisterRefreshReceiver()
+        overlayController?.stop()
+        overlayController = null
+        registeredControllers.values.forEach { (controller, callback) ->
+            runCatching { controller.unregisterCallback(callback) }
+        }
+        registeredControllers.clear()
+        notificationControllers.clear()
+        if (::mediaSessions.isInitialized)
+            runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
+        getSharedPreferences("pbar", MODE_PRIVATE).edit()
+            .putBoolean("diagnostic_listener_connected", false).apply()
+        runCatching { requestUnbind() }
+    }
+
     override fun onListenerConnected() {
+        if (isQuitRequested()) { stopForQuit(); return }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("diagnostic_listener_connected", true)
             .putLong("diagnostic_listener_connected_at", System.currentTimeMillis()).apply()
@@ -85,7 +114,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         overlayController = (overlayController ?: OverlayController(this)).also { it.start() }
         mediaSessions = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         if (!refreshReceiverRegistered) {
-            val filter = IntentFilter(ACTION_REFRESH)
+            val filter = IntentFilter(ACTION_REFRESH).apply { addAction(ACTION_QUIT) }
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
             else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(refreshReceiver, filter)
             refreshReceiverRegistered = true
@@ -315,7 +344,8 @@ class ProgressNotificationListener : NotificationListenerService() {
         overlayController?.stop()
         getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("diagnostic_listener_connected", false).apply()
         // Ask Android to reconnect so the overlay comes back without reopening PBar.
-        runCatching { NotificationListenerService.requestRebind(ComponentName(this, ProgressNotificationListener::class.java)) }
+        if (!isQuitRequested())
+            runCatching { NotificationListenerService.requestRebind(ComponentName(this, ProgressNotificationListener::class.java)) }
         super.onListenerDisconnected()
     }
 
@@ -334,7 +364,9 @@ class ProgressNotificationListener : NotificationListenerService() {
         super.onDestroy()
     }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification) = consume(sbn)
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (!isQuitRequested()) consume(sbn)
+    }
     override fun onNotificationRankingUpdate(rankingMap: RankingMap?) {
         // Ranking updates fire constantly. Re-consuming every notification here ran a full media
         // session query per media notification and let a download overwrite an active media signal.
@@ -587,6 +619,7 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     companion object {
+        const val ACTION_QUIT = "com.n2k02.pbar.QUIT"
         const val ACTION_SIGNAL = "com.n2k02.pbar.SIGNAL_UPDATED"
         private val DEFAULT_IGNORED_PACKAGES = setOf("com.android.systemui", "android")
         /** Asks the listener to re-query media sessions now (sent by "Refresh status"). */
