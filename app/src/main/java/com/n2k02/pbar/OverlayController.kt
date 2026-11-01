@@ -356,7 +356,11 @@ class OverlayController(private val host: Context) {
                 post { render() }
             } else if (demoActive() || (signal && (indeterminate ||
                 (media && mediaPlaying && mediaDurationMs > 0L) ||
-                (timerActive && timerDurationMs > 0L)))) postInvalidateOnAnimation()
+                (timerActive && timerDurationMs > 0L)))) {
+                // A thin progress strip does not need 60/120 Hz redraws.
+                // Limit updates to ~30 fps, and draw nothing when progress is static.
+                postInvalidateDelayed(33L)
+            }
         }
     }
 
