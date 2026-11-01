@@ -13,6 +13,10 @@ class OverlayAnimationEfficiencyTest {
         ).first { it.exists() }
         val source = file.readText()
         assertTrue(source.contains("postInvalidateDelayed(33L)"))
+        assertTrue(source.contains("animationAllowed = screenInteractive"))
+        assertTrue(source.contains("animationAllowed && (demoActive()"))
+        assertTrue(source.contains("Intent.ACTION_SCREEN_OFF -> { fullscreen = false; screenInteractive = false }"))
+        assertTrue(source.contains("Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT ->"))
         assertFalse(source.contains("postInvalidateOnAnimation()"))
         assertTrue(source.contains("media && mediaPlaying && mediaDurationMs > 0L"))
     }

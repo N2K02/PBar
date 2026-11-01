@@ -12,6 +12,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
@@ -32,6 +33,8 @@ class OverlayController(private val host: Context) {
     private val wm = host.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private var overlay: IndicatorView? = null
     private var fullscreen = false
+    // Updated from screen broadcasts, not polled on each rendered frame.
+    private var screenInteractive = (host.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
     private var receiverRegistered = false
     private var demoStartedAt = 0L
     private fun demoActive() = demoStartedAt > 0L &&
@@ -42,7 +45,11 @@ class OverlayController(private val host: Context) {
             when (intent?.action) {
                 PBarAccessibilityService.ACTION_FULLSCREEN_CHANGED ->
                     fullscreen = intent.getBooleanExtra(PBarAccessibilityService.EXTRA_FULLSCREEN, false)
-                Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF, Intent.ACTION_USER_PRESENT -> fullscreen = false
+                Intent.ACTION_SCREEN_OFF -> { fullscreen = false; screenInteractive = false }
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
+                    fullscreen = false
+                    screenInteractive = true
+                }
                 ACTION_TEST_PROGRESS -> demoStartedAt = SystemClock.elapsedRealtime()
             }
             render()
@@ -221,8 +228,10 @@ class OverlayController(private val host: Context) {
         private var opacity = 255
         private var rounded = true
         private var emphasiseProgress = true
+        private var animationAllowed = true
 
         fun updateFrom(prefs: SharedPreferences) {
+            animationAllowed = screenInteractive
             val nextPackage = if (demoActive()) "" else prefs.getString("signal_package", "").orEmpty()
             val nextTitle = if (demoActive()) "" else prefs.getString("signal_title", "").orEmpty()
             val nextMedia = !demoActive() && prefs.getBoolean("signal_media", false)
@@ -354,9 +363,9 @@ class OverlayController(private val host: Context) {
                 // The preview never modifies real signals; resume the original overlay state.
                 demoStartedAt = 0L
                 post { render() }
-            } else if (demoActive() || (signal && (indeterminate ||
+            } else if (animationAllowed && (demoActive() || (signal && (indeterminate ||
                 (media && mediaPlaying && mediaDurationMs > 0L) ||
-                (timerActive && timerDurationMs > 0L)))) {
+                (timerActive && timerDurationMs > 0L))))) {
                 // Cap continuous repaint of a narrow progress strip to 30 fps.
                 // No redraw is scheduled when the signal and playback are static.
                 postInvalidateDelayed(33L)
