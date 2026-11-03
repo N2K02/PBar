@@ -58,7 +58,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private enum class Tab(val label: String) { HOME("Home"), STYLE("Appearance"), APPS("Apps"), SETTINGS("Settings") }
-private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), APP_UPDATES("About & updates") }
+private enum class SettingsPage(val title: String) { MAIN("Settings"), PERMISSIONS("Permissions"), STARTUP("Startup"), APP_UPDATES("About & updates") }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
         val prefs = remember { getSharedPreferences("pbar", MODE_PRIVATE) }
         var tab by remember { mutableStateOf(Tab.HOME) }
         var settingsPage by remember { mutableStateOf(SettingsPage.MAIN) }
+        var startOnBoot by remember { mutableStateOf(prefs.getBoolean("start_on_boot", true)) }
         // Refresh permission indicators when returning from Android Settings.
         var permissionRevision by remember { mutableIntStateOf(0) }
         DisposableEffect(this@MainActivity) {
@@ -353,6 +354,7 @@ class MainActivity : ComponentActivity() {
                                         selectedApp != null -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.APP_UPDATES -> Icons.Rounded.SystemUpdateRounded
                                         tab == Tab.SETTINGS && settingsPage == SettingsPage.PERMISSIONS -> Icons.Rounded.Security
+                                        tab == Tab.SETTINGS && settingsPage == SettingsPage.STARTUP -> Icons.Rounded.TuneRounded
                                         tab == Tab.STYLE -> Icons.Rounded.PaletteRounded
                                         tab == Tab.APPS -> Icons.Rounded.TuneRounded
                                         tab == Tab.SETTINGS -> Icons.Rounded.SettingsRounded
@@ -1189,6 +1191,13 @@ class MainActivity : ComponentActivity() {
                                             },
                                         )
                                         ListItem(
+                                            headlineContent = { Text("Start on boot") },
+                                            supportingContent = { Text(if (startOnBoot) "PBar resumes after phone restart" else "Start PBar manually after restart") },
+                                            leadingContent = { Icon(Icons.Rounded.TuneRounded, contentDescription = null) },
+                                            trailingContent = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                                            modifier = Modifier.clickable { settingsPage = SettingsPage.STARTUP }
+                                        )
+                                        ListItem(
                                             headlineContent = { Text("Permissions") },
                                             supportingContent = {
                                                 Text(if (overlayReady && listenerReady) "All permissions granted" else "Permissions needed")
@@ -1208,6 +1217,16 @@ class MainActivity : ComponentActivity() {
                                             leadingContent = { Icon(Icons.Rounded.SystemUpdateRounded, contentDescription = null) },
                                             trailingContent = { dev.n2k02.updater.N2K02UpdateBadge(updateStatus) },
                                             modifier = Modifier.clickable { settingsPage = SettingsPage.APP_UPDATES }
+                                        )
+                                    }
+                                }
+                                SettingsPage.STARTUP -> {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        ListItem(
+                                            headlineContent = { Text("Start on boot") },
+                                            supportingContent = { Text("Automatically restore PBar after your phone restarts. Overlay and notification access must already be granted.") },
+                                            leadingContent = { Icon(Icons.Rounded.TuneRounded, contentDescription = null) },
+                                            trailingContent = { Switch(checked = startOnBoot, onCheckedChange = { value -> startOnBoot = value; prefs.edit().putBoolean("start_on_boot", value).apply() }) }
                                         )
                                     }
                                 }
