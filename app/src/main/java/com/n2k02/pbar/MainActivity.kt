@@ -120,8 +120,11 @@ class MainActivity : ComponentActivity() {
             android.service.notification.NotificationListenerService.requestRebind(
                 ComponentName(this, ProgressNotificationListener::class.java))
         }
-        if (Settings.canDrawOverlays(this)) {
+        if (Settings.canDrawOverlays(this) && PBarForegroundService.hasNotificationListenerAccess(this)) {
+            PBarForegroundService.start(this)
             refreshOverlay()
+        } else {
+            PBarForegroundService.stop(this)
         }
     }
 
@@ -136,6 +139,7 @@ class MainActivity : ComponentActivity() {
             .putBoolean("quit_requested", true)
             .putBoolean("overlay_enabled", false).commit()
         sendBroadcast(Intent(ProgressNotificationListener.ACTION_QUIT).setPackage(packageName))
+        PBarForegroundService.stop(this)
         LiveUpdater.controller.cancel()
         finishAndRemoveTask()
     }
@@ -168,7 +172,6 @@ class MainActivity : ComponentActivity() {
             }.getOrDefault(false)
         }
         val pbarIcon = remember { loadAppIcon(packageManager, packageName) }
-        var showTrackingDetails by remember { mutableStateOf(false) }
         var overlayEnabled by remember { mutableStateOf(true) }
         var style by remember { mutableStateOf("line") }
         // Both orientations use horizontal lines, with independent positions when rotating.
@@ -433,48 +436,114 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             ElevatedCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Live status", style = MaterialTheme.typography.titleLarge)
-                                    Text(
-                                        when {
-                                            !signalHas -> "No active progress"
-                                            signalMedia && signalIndeterminate -> "Media · tracking playback"
-                                            signalMedia && signalDuration > 0L -> "Media · " + (if (signalPlaying) "Playing" else "Paused") + " · " + signalProgress + "%"
-                                            signalMedia -> "Media · timing unavailable"
-                                            signalIndeterminate -> "Tracking progress"
-                                            else -> "Progress · " + signalProgress + "%"
-                                        },
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        TextButton(onClick = { recheckSignalStatus() }) { Text("Refresh") }
-                                        TextButton(onClick = { showTrackingDetails = !showTrackingDetails }) {
-                                            Text(if (showTrackingDetails) "Hide details" else "Details")
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    val statusContainer = if (signalHas) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                                    val statusContent = if (signalHas) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text("Live status", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                when {
+                                                    !signalHas -> "No active progress"
+                                                    signalMedia && signalIndeterminate -> "Media playback is being tracked"
+                                                    signalMedia && signalDuration > 0L -> (if (signalPlaying) "Playing" else "Paused") + " · " + signalProgress + "%"
+                                                    signalMedia -> "Media timing unavailable"
+                                                    signalIndeterminate -> "Tracking progress"
+                                                    else -> "Progress · " + signalProgress + "%"
+                                                },
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        PBarStatusBadge(if (signalHas) "LIVE" else "IDLE", statusContainer, statusContent)
+                                    }
+                                    if (signalHas && !signalIndeterminate) {
+                                        LinearProgressIndicator(
+                                            progress = { (signalProgress.coerceIn(0, 100) / 100f) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        if (signalHas) {
+                                            PBarStatusBadge(
+                                                when {
+                                                    signalMedia -> "MEDIA"
+                                                    signalIndeterminate -> "INDETERMINATE"
+                                                    else -> "PROGRESS"
+                                                },
+                                                MaterialTheme.colorScheme.secondaryContainer,
+                                                MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                            if (signalMedia) {
+                                                PBarStatusBadge(
+                                                    if (signalPlaying) "PLAYING" else "PAUSED",
+                                                    MaterialTheme.colorScheme.tertiaryContainer,
+                                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                                )
+                                            }
+                                        }
+                                        PBarStatusBadge(
+                                            if (diagnosticListenerConnected) "LISTENER CONNECTED" else "LISTENER DISCONNECTED",
+                                            if (diagnosticListenerConnected) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.errorContainer,
+                                            if (diagnosticListenerConnected) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        PBarStatusBadge(
+                                            "$diagnosticSessionCount SESSIONS",
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    TextButton(onClick = { recheckSignalStatus() }) { Text("Refresh status") }
+                                    HorizontalDivider()
+                                    Text("Tracking details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                    if (signalPackage.isNotBlank()) {
+                                        PBarDetailRow("Source app", signalPackage)
+                                    }
+                                    if (signalMedia && signalDuration > 0L) {
+                                        PBarDetailRow(
+                                            "Playback position",
+                                            (signalPosition / 1000L).toString() + "s / " + (signalDuration / 1000L) + "s"
+                                        )
+                                    }
+                                    PBarDetailRow("Active media sessions", diagnosticSessionCount.toString())
+                                    PBarDetailRow("Listener", if (diagnosticListenerConnected) "Connected" else "Not connected")
+                                    Text("Media-session status", style = MaterialTheme.typography.labelLarge)
+                                    Text(diagnosticSessionSummary, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (diagnosticNotificationSummary.isNotBlank()) {
+                                        Text("Visible progress notifications", style = MaterialTheme.typography.labelLarge)
+                                        Text(diagnosticNotificationSummary, style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    if (diagnosticSessionError.isNotBlank()) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.errorContainer,
+                                            shape = RoundedCornerShape(14.dp)
+                                        ) {
+                                            Text(
+                                                "Session issue · " + diagnosticSessionError,
+                                                modifier = Modifier.padding(12.dp),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onErrorContainer
+                                            )
                                         }
                                     }
-                                    if (showTrackingDetails) {
-                                            if (signalPackage.isNotBlank()) {
-                                            Text("Source: " + signalPackage, style = MaterialTheme.typography.bodySmall)
-                                        }
-                                        if (signalMedia && signalDuration > 0L) {
-                                            Text("Position: " + (signalPosition / 1000L) + "s / " + (signalDuration / 1000L) + "s", style = MaterialTheme.typography.bodySmall)
-                                        }
-                                        HorizontalDivider()
-                                        Text("Media-session diagnostics", style = MaterialTheme.typography.titleMedium)
-                                        Text("Listener: " + if (diagnosticListenerConnected) "connected" else "not currently connected", style = MaterialTheme.typography.bodySmall)
-                                        Text("Active sessions reported by Android: " + diagnosticSessionCount, style = MaterialTheme.typography.bodySmall)
-                                        Text(diagnosticSessionSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        if (diagnosticNotificationSummary.isNotBlank()) {
-                                            Text("Notifications PBar can see:", style = MaterialTheme.typography.bodySmall)
-                                            Text(diagnosticNotificationSummary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        if (diagnosticSessionError.isNotBlank()) {
-                                            Text("Session error: " + diagnosticSessionError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                        }
-                                        if (signalUpdated > 0L) {
-                                            Text("Last signal: " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        }
+                                    if (signalUpdated > 0L) {
+                                        PBarStatusBadge(
+                                            "LAST UPDATE · " + ((System.currentTimeMillis() - signalUpdated).coerceAtLeast(0L) / 1000L) + "s ago",
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1188,6 +1257,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
+@Composable
+private fun PBarStatusBadge(label: String, container: ComposeColor, content: ComposeColor) {
+    Surface(color = container, shape = RoundedCornerShape(50)) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = content,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun PBarDetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(12.dp))
+        Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+}
 @Composable
 private fun ProgressLinePreview(
     position: String,

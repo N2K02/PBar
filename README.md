@@ -22,12 +22,12 @@ PBar is an Android progress overlay inspired by the idea of a quick-glance statu
 - Android 8.0 (API 26) or newer.
 - Notification access to read progress/media/timer notifications.
 - Display-over-other-apps permission to show the indicator.
-- No persistent PBar foreground-service notification; the overlay is hosted by the notification-listener service, which Android binds and restarts on its own.
+- A sticky foreground service keeps the user-enabled overlay process running and provides an ongoing notification. Notification access and display-over-other-apps permission are still required for the overlay.
 - Accessibility permission is optional and used for fullscreen window-boundary detection. PBar does not read or store on-screen text.
 
 PBar uses Android's active MediaSession data for playback progress and notification progress for downloads and timers. It can only show exact media progress when the source exposes usable duration and position metadata; otherwise it uses an animated indeterminate indicator. Media bars respect the configured app colour or the default/custom colour.
 
-The floating overlay runs inside the notification-listener service, so no persistent foreground-service notification is needed and the overlay comes back by itself after a reboot or if Android reconnects the listener. If an aggressive battery manager still stops PBar, exempt it from battery optimisation in system settings.
+The floating overlay remains hosted by Android's notification-listener service, while a separate sticky foreground service improves process priority when the app is enabled. Android can restart that service after reclaiming the process; it rechecks the saved enabled and permission state before resuming. PBar does not request notification permission: on Android 13 and newer, the service can still run when notification permission is denied, though Android may hide its notification from the drawer and show the active service in system controls. If an aggressive battery manager still stops PBar, exempt it from battery optimisation in system settings.
 
 ## Build
 
