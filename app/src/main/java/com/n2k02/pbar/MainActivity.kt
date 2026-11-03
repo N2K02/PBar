@@ -120,8 +120,11 @@ class MainActivity : ComponentActivity() {
             android.service.notification.NotificationListenerService.requestRebind(
                 ComponentName(this, ProgressNotificationListener::class.java))
         }
-        if (Settings.canDrawOverlays(this)) {
+        if (Settings.canDrawOverlays(this) && PBarForegroundService.hasNotificationListenerAccess(this)) {
+            PBarForegroundService.start(this)
             refreshOverlay()
+        } else {
+            PBarForegroundService.stop(this)
         }
     }
 
@@ -136,6 +139,7 @@ class MainActivity : ComponentActivity() {
             .putBoolean("quit_requested", true)
             .putBoolean("overlay_enabled", false).commit()
         sendBroadcast(Intent(ProgressNotificationListener.ACTION_QUIT).setPackage(packageName))
+        PBarForegroundService.stop(this)
         LiveUpdater.controller.cancel()
         finishAndRemoveTask()
     }
