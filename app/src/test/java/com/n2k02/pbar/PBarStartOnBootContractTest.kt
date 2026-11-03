@@ -1,15 +1,16 @@
 package com.n2k02.pbar
 
+import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class PBarStartOnBootContractTest {
+    private fun source(path: String): String = listOf(File(path), File("../$path")).first { it.isFile }.readText()
+
     @Test fun bootRestoreDefaultsEnabledAndRequiresBothOverlayPermissions() {
-        val root = File("src/main")
-        val receiver = File(root, "java/com/n2k02/pbar/PBarBootReceiver.kt").readText()
-        val manifest = File(root, "AndroidManifest.xml").readText()
-        val activity = File(root, "java/com/n2k02/pbar/MainActivity.kt").readText()
+        val receiver = source("app/src/main/java/com/n2k02/pbar/PBarBootReceiver.kt")
+        val manifest = source("app/src/main/AndroidManifest.xml")
+        val activity = source("app/src/main/java/com/n2k02/pbar/MainActivity.kt")
         assertTrue(receiver.contains("getBoolean(\"start_on_boot\", true)"))
         assertTrue(receiver.contains("PBarForegroundService.hasNotificationListenerAccess(context)"))
         assertTrue(receiver.contains("Settings.canDrawOverlays(context)"))
