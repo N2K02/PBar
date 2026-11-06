@@ -40,11 +40,22 @@ class ProgressNotificationListener : NotificationListenerService() {
             val total = timerTotalMs
             val percent = if (total > 0L) (((total - remaining).coerceIn(0L, total) * 100L) / total).toInt() else 0
             val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
-            if (prefs.getString("signal_package", null) == timerPackage && prefs.getBoolean("signal_timer", false)) {
-                prefs.edit().putInt("signal_progress", percent).putBoolean("signal_indeterminate", false).apply()
-                sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
+            if (isQuitRequested() ||
+                prefs.getString("signal_package", null) != timerPackage ||
+                !prefs.getBoolean("signal_timer", false)) {
+                stopTimerTicker()
+                return
             }
-            if (remaining > 0L) timerHandler.postDelayed(this, 1000L)
+            // IndicatorView interpolates timer progress independently. Update
+            // preferences/broadcast only when the visible whole percent changes.
+            if (percent != prefs.getInt("signal_progress", -1)) {
+                prefs.edit().putInt("signal_progress", percent)
+                    .putBoolean("signal_indeterminate", false).apply()
+                sendBroadcast(Intent(ACTION_SIGNAL).setPackage(packageName))
+            }
+            val next = TimerTickPolicy.nextReportDelayMs(remaining, total)
+            if (next != null) timerHandler.postDelayed(this, next)
+            else stopTimerTicker()
         }
     }
     // Errors are kept so the Home screen can show why Android reported no sessions,
@@ -491,7 +502,8 @@ class ProgressNotificationListener : NotificationListenerService() {
             .putLong("signal_timer_anchor_elapsed", timerStartElapsed)
             .apply()
         sendBroadcast(Intent(ACTION_SIGNAL).setPackage(packageName))
-        timerHandler.postDelayed(timerTicker, 1000L)
+        timerHandler.postDelayed(timerTicker,
+            TimerTickPolicy.nextReportDelayMs(remainingMs, totalMs) ?: 1000L)
     }
 
     private fun stopTimerTicker() {
