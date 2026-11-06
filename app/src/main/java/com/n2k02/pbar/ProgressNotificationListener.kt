@@ -63,19 +63,21 @@ class ProgressNotificationListener : NotificationListenerService() {
                 refreshMediaSessions(currentMediaControllers())
         }
     }
-    private val progressTicker = object : Runnable {
-        override fun run() {
-            if (!::mediaSessions.isInitialized) return
+    // Media position is extrapolated in IndicatorView from PlaybackState's timestamp.
+    // A per-second full MediaSession query was redundant with media callbacks and
+    // caused unnecessary preferences writes, notification scans and broadcasts.
+    private var refreshScheduled = false
+    private val refreshRunnable = Runnable {
+        refreshScheduled = false
+        if (!isQuitRequested() && ::mediaSessions.isInitialized)
             refreshMediaSessions(currentMediaControllers())
-        }
     }
-    private val refreshRunnable = Runnable { refreshMediaSessions(currentMediaControllers()) }
 
-    /** Coalesces bursts of events (callbacks, ranking updates) into a single session query. */
+    /** Coalesce ranking/media callback bursts without postponing refresh forever. */
     private fun requestRefresh() {
-        if (isQuitRequested()) return
-        progressHandler.removeCallbacks(refreshRunnable)
-        progressHandler.postDelayed(refreshRunnable, 50L)
+        if (isQuitRequested() || refreshScheduled) return
+        refreshScheduled = true
+        progressHandler.postDelayed(refreshRunnable, 100L)
     }
 
     private val sessionsChanged = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
@@ -85,10 +87,11 @@ class ProgressNotificationListener : NotificationListenerService() {
     private fun isQuitRequested(): Boolean =
         getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("quit_requested", false)
 
-    /** Stop OS-managed callbacks and detach until the user reopens PBar. */
-    private fun stopForQuit() {
+    /** Release all active work both on Quit and on transient OS disconnection. */
+    private fun releaseResources() {
         progressHandler.removeCallbacksAndMessages(null)
         timerHandler.removeCallbacksAndMessages(null)
+        refreshScheduled = false
         unregisterRefreshReceiver()
         overlayController?.stop()
         overlayController = null
@@ -97,10 +100,17 @@ class ProgressNotificationListener : NotificationListenerService() {
         }
         registeredControllers.clear()
         notificationControllers.clear()
+        lastActiveTokens = emptySet()
+        timerPackage = ""
         if (::mediaSessions.isInitialized)
             runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
         getSharedPreferences("pbar", MODE_PRIVATE).edit()
             .putBoolean("diagnostic_listener_connected", false).apply()
+    }
+
+    /** Explicit Quit also unbinds the OS listener; no automatic reconnect. */
+    private fun stopForQuit() {
+        releaseResources()
         runCatching { requestUnbind() }
     }
 
@@ -268,7 +278,6 @@ class ProgressNotificationListener : NotificationListenerService() {
                 (controller.metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) > 0L &&
                     (controller.playbackState?.position ?: -1L) >= 0L
             } ?: playingCandidates.firstOrNull()
-        progressHandler.removeCallbacks(progressTicker)
         if (playing != null) {
             val metadata = playing.metadata
             val state = playing.playbackState
@@ -298,7 +307,6 @@ class ProgressNotificationListener : NotificationListenerService() {
                 .putLong("signal_updated", System.currentTimeMillis())
                 .apply()
             sendBroadcast(android.content.Intent(ACTION_SIGNAL).setPackage(packageName))
-            if (state?.state == PlaybackState.STATE_PLAYING || state?.state == PlaybackState.STATE_FAST_FORWARDING || state?.state == PlaybackState.STATE_REWINDING) progressHandler.postDelayed(progressTicker, 1000L)
         } else {
             // A paused/finished media session must not keep the overlay visible.
             // Preserve genuinely active timer/download progress notifications only.
@@ -340,27 +348,15 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
-        unregisterRefreshReceiver()
-        overlayController?.stop()
-        getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("diagnostic_listener_connected", false).apply()
-        // Ask Android to reconnect so the overlay comes back without reopening PBar.
+        releaseResources()
+        // Rebind only after cleanup; a new listener connection rebuilds state.
         if (!isQuitRequested())
             runCatching { NotificationListenerService.requestRebind(ComponentName(this, ProgressNotificationListener::class.java)) }
         super.onListenerDisconnected()
     }
 
     override fun onDestroy() {
-        unregisterRefreshReceiver()
-        overlayController?.stop()
-        overlayController = null
-        registeredControllers.values.forEach { (controller, callback) -> runCatching { controller.unregisterCallback(callback) } }
-        registeredControllers.clear()
-        progressHandler.removeCallbacks(progressTicker)
-        progressHandler.removeCallbacks(refreshRunnable)
-        stopTimerTicker()
-        if (::mediaSessions.isInitialized) runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
-        notificationControllers.clear()
-        getSharedPreferences("pbar", MODE_PRIVATE).edit().putBoolean("diagnostic_listener_connected", false).apply()
+        releaseResources()
         super.onDestroy()
     }
 
@@ -377,8 +373,8 @@ class ProgressNotificationListener : NotificationListenerService() {
     private fun consume(sbn: StatusBarNotification) {
         rememberSourcePackage(sbn.packageName)
         if (isMediaNotification(sbn)) {
+            // The media branch below performs exactly one session refresh.
             rememberNotificationSession(sbn)
-            if (::mediaSessions.isInitialized) refreshMediaSessions(currentMediaControllers())
         }
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         if (isIgnoredPackage(sbn.packageName)) {
