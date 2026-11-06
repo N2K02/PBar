@@ -12,7 +12,8 @@ class OverlayAnimationEfficiencyTest {
             File("app/src/main/java/com/n2k02/pbar/OverlayController.kt")
         ).first { it.exists() }
         val source = file.readText()
-        assertTrue(source.contains("postInvalidateDelayed(33L)"))
+        assertTrue(source.contains("ProgressFramePacer.nextDelayMs("))
+        assertTrue(source.contains("if (nextDelay != null) postInvalidateDelayed(nextDelay)"))
         assertTrue(source.contains("animationAllowed = screenInteractive"))
         assertTrue(source.contains("animationAllowed && (demoActive()"))
         assertTrue(source.contains("Intent.ACTION_SCREEN_OFF -> { fullscreen = false; screenInteractive = false }"))

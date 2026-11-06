@@ -11,6 +11,21 @@ import android.view.accessibility.AccessibilityEvent
  * and package names; it never reads or stores on-screen text.
  */
 class PBarAccessibilityService : AccessibilityService() {
+    private var lastReportedFullscreen: Boolean? = null
+
+    // Window events can arrive in bursts. Only actual fullscreen transitions
+    // need a broadcast and an overlay layout check.
+    private fun reportFullscreen(value: Boolean, foregroundPackage: String = "") {
+        if (lastReportedFullscreen == value) return
+        lastReportedFullscreen = value
+        sendBroadcast(
+            Intent(ACTION_FULLSCREEN_CHANGED)
+                .setPackage(packageName)
+                .putExtra(EXTRA_FULLSCREEN, value)
+                .putExtra(EXTRA_FOREGROUND_PACKAGE, foregroundPackage)
+        )
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
@@ -19,7 +34,7 @@ class PBarAccessibilityService : AccessibilityService() {
         val packageName = event.packageName?.toString().orEmpty()
         if (packageName.isBlank()) return
         if (packageName == this.packageName) {
-            sendBroadcast(Intent(ACTION_FULLSCREEN_CHANGED).setPackage(this.packageName).putExtra(EXTRA_FULLSCREEN, false))
+            reportFullscreen(false, packageName)
             return
         }
 
@@ -47,16 +62,20 @@ class PBarAccessibilityService : AccessibilityService() {
             }
         } catch (_: Exception) { false }
 
-        sendBroadcast(
-            Intent(ACTION_FULLSCREEN_CHANGED)
-                .setPackage(this.packageName)
-                .putExtra(EXTRA_FULLSCREEN, fullscreen)
-                .putExtra(EXTRA_FOREGROUND_PACKAGE, packageName)
-        )
+        reportFullscreen(fullscreen, packageName)
     }
 
     override fun onInterrupt() {
-        sendBroadcast(Intent(ACTION_FULLSCREEN_CHANGED).setPackage(packageName).putExtra(EXTRA_FULLSCREEN, false))
+        reportFullscreen(false)
+        lastReportedFullscreen = null
+    }
+
+    override fun onDestroy() {
+        // Never leave PBar hidden if the optional helper is disabled while a
+        // fullscreen application is active.
+        reportFullscreen(false)
+        lastReportedFullscreen = null
+        super.onDestroy()
     }
 
     companion object {
