@@ -366,9 +366,19 @@ class OverlayController(private val host: Context) {
             } else if (animationAllowed && (demoActive() || (signal && (indeterminate ||
                 (media && mediaPlaying && mediaDurationMs > 0L) ||
                 (timerActive && timerDurationMs > 0L))))) {
-                // Cap continuous repaint of a narrow progress strip to 30 fps.
-                // No redraw is scheduled when the signal and playback are static.
-                postInvalidateDelayed(33L)
+                // Media and timers interpolate from elapsed time already, so
+                // repaint only as quickly as displayed pixels can change.
+                // Indeterminate and demo animation retain their 30fps cap.
+                val correcting = media && mediaPlaying && positionCorrectionMs != 0f &&
+                    SystemClock.elapsedRealtime() - correctionAnchorElapsed < 650L
+                val nextDelay = ProgressFramePacer.nextDelayMs(
+                    demo = demoActive(), indeterminate = indeterminate,
+                    mediaPlaying = media && mediaPlaying,
+                    mediaDurationMs = mediaDurationMs, mediaSpeed = mediaSpeed,
+                    timerActive = timerActive, timerDurationMs = timerDurationMs,
+                    pixelLength = maxOf(width, height), correctingPosition = correcting
+                )
+                if (nextDelay != null) postInvalidateDelayed(nextDelay)
             }
         }
     }
