@@ -13,6 +13,7 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -67,6 +68,17 @@ class ProgressNotificationListener : NotificationListenerService() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_QUIT) {
                 stopForQuit()
+                return
+            }
+            val action = intent?.action
+            if (action == Intent.ACTION_POWER_CONNECTED ||
+                action == Intent.ACTION_BATTERY_OKAY ||
+                action == PowerManager.ACTION_POWER_SAVE_MODE_CHANGED) {
+                if (!isQuitRequested() && PBarPowerRecovery.shouldRestore(this@ProgressNotificationListener)) {
+                    PBarForegroundService.start(this@ProgressNotificationListener)
+                    overlayController?.render()
+                    requestRefresh()
+                }
                 return
             }
             // Sent by "Refresh status"; never resume timers after explicit Quit.
@@ -133,9 +145,15 @@ class ProgressNotificationListener : NotificationListenerService() {
         seedDefaultIgnoredPackages(prefs)
         // Start the overlay first so it still works if media-session setup below fails.
         overlayController = (overlayController ?: OverlayController(this)).also { it.start() }
+        PBarPowerRecovery.schedule(this)
         mediaSessions = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         if (!refreshReceiverRegistered) {
-            val filter = IntentFilter(ACTION_REFRESH).apply { addAction(ACTION_QUIT) }
+            val filter = IntentFilter(ACTION_REFRESH).apply {
+                addAction(ACTION_QUIT)
+                addAction(Intent.ACTION_POWER_CONNECTED)
+                addAction(Intent.ACTION_BATTERY_OKAY)
+                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+            }
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(refreshReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
             else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(refreshReceiver, filter)
             refreshReceiverRegistered = true

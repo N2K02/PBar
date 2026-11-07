@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
             }
             editor.apply()
         }
+        PBarPowerRecovery.schedule(this)
         setContent { PBarApp() }
         if (getSharedPreferences("pbar", MODE_PRIVATE).getBoolean("overlay_enabled", false) && Settings.canDrawOverlays(this)) {
             refreshOverlay()
@@ -121,6 +122,7 @@ class MainActivity : ComponentActivity() {
                 ComponentName(this, ProgressNotificationListener::class.java))
         }
         if (Settings.canDrawOverlays(this) && PBarForegroundService.hasNotificationListenerAccess(this)) {
+            PBarPowerRecovery.schedule(this)
             PBarForegroundService.start(this)
             refreshOverlay()
         } else {
@@ -139,6 +141,7 @@ class MainActivity : ComponentActivity() {
             .putBoolean("quit_requested", true)
             .putBoolean("overlay_enabled", false).commit()
         sendBroadcast(Intent(ProgressNotificationListener.ACTION_QUIT).setPackage(packageName))
+        PBarPowerRecovery.cancel(this)
         PBarForegroundService.stop(this)
         LiveUpdater.controller.cancel()
         finishAndRemoveTask()

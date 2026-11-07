@@ -5,6 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.os.PowerManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -15,6 +18,27 @@ import android.provider.Settings
 
 /** Keeps the enabled overlay process important; the notification listener remains OS-managed. */
 class PBarForegroundService : Service() {
+    private var powerReceiverRegistered = false
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (PBarPowerRecovery.shouldRestore(this@PBarForegroundService)) {
+                PBarPowerRecovery.restore(this@PBarForegroundService)
+            }
+        }
+    }
+
+    private fun watchPowerState() {
+        if (powerReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_BATTERY_OKAY)
+            addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(powerReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        else @Suppress("UnspecifiedRegisterReceiverFlag") registerReceiver(powerReceiver, filter)
+        powerReceiverRegistered = true
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -28,10 +52,14 @@ class PBarForegroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        PBarPowerRecovery.schedule(this)
+        runCatching { watchPowerState() }.onFailure { AppLog.add("RECOVERY", "POWER_RECEIVER_FAILED") }
         return START_STICKY
     }
 
     override fun onDestroy() {
+        if (powerReceiverRegistered) runCatching { unregisterReceiver(powerReceiver) }
+        powerReceiverRegistered = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }

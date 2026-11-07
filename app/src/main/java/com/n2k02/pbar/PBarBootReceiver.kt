@@ -14,6 +14,7 @@ class PBarBootReceiver : BroadcastReceiver() {
         // even if the previous session was stopped with Quit.
         prefs.edit().putBoolean("quit_requested", false).putBoolean("overlay_enabled", true).apply()
         if (PBarForegroundService.hasNotificationListenerAccess(context) && android.provider.Settings.canDrawOverlays(context)) {
+            PBarPowerRecovery.schedule(context)
             PBarForegroundService.start(context)
         }
     }
