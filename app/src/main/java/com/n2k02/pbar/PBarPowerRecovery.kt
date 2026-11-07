@@ -68,8 +68,8 @@ internal object PBarPowerRecovery {
     fun restore(context: Context): Boolean {
         if (!shouldRestore(context)) return false
         val app = context.applicationContext
-        val prefs = app.getSharedPreferences("pbar", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean("diagnostic_listener_connected", false)) {
+        // Never rely on a persisted connection flag after an OEM kills the process.
+        if (!ProgressNotificationListener.isConnectedInProcess) {
             runCatching {
                 NotificationListenerService.requestRebind(ComponentName(app, ProgressNotificationListener::class.java))
             }.onFailure { AppLog.add("RECOVERY", "LISTENER_REBIND_FAILED") }

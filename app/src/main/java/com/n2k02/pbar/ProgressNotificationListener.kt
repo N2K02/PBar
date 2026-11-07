@@ -127,6 +127,7 @@ class ProgressNotificationListener : NotificationListenerService() {
         timerPackage = ""
         if (::mediaSessions.isInitialized)
             runCatching { mediaSessions.removeOnActiveSessionsChangedListener(sessionsChanged) }
+        isConnectedInProcess = false
         getSharedPreferences("pbar", MODE_PRIVATE).edit()
             .putBoolean("diagnostic_listener_connected", false).apply()
     }
@@ -139,6 +140,7 @@ class ProgressNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         if (isQuitRequested()) { stopForQuit(); return }
+        isConnectedInProcess = true
         val prefs = getSharedPreferences("pbar", MODE_PRIVATE)
         prefs.edit().putBoolean("diagnostic_listener_connected", true)
             .putLong("diagnostic_listener_connected_at", System.currentTimeMillis()).apply()
@@ -645,6 +647,10 @@ class ProgressNotificationListener : NotificationListenerService() {
     }
 
     companion object {
+        /** Process-local truth: stored connection flags can be stale after an abrupt kill. */
+        @Volatile var isConnectedInProcess: Boolean = false
+            private set
+
         const val ACTION_QUIT = "com.n2k02.pbar.QUIT"
         const val ACTION_SIGNAL = "com.n2k02.pbar.SIGNAL_UPDATED"
         private val DEFAULT_IGNORED_PACKAGES = setOf("com.android.systemui", "android")
