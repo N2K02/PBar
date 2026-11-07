@@ -15,7 +15,7 @@ import android.service.notification.NotificationListenerService
 /** Never restart a user-quit or disabled bar, even if the phone is charging. */
 internal object PBarRecoveryPolicy {
     fun shouldRestore(enabled: Boolean, quitRequested: Boolean, charging: Boolean, powerSaveMode: Boolean): Boolean =
-        enabled && !quitRequested && (charging || !powerSaveMode)
+        BatteryRecoveryPolicy.canRecover(enabled && !quitRequested, true, charging, powerSaveMode)
 }
 
 /**
@@ -25,7 +25,6 @@ internal object PBarRecoveryPolicy {
  */
 internal object PBarPowerRecovery {
     private const val JOB_ID = 4202
-    private const val PERIOD_MS = 15 * 60 * 1000L
 
     private fun enabled(context: Context): Boolean {
         val prefs = context.getSharedPreferences("pbar", Context.MODE_PRIVATE)
@@ -54,7 +53,7 @@ internal object PBarPowerRecovery {
         if (scheduler.getPendingJob(JOB_ID) != null) return
         val job = JobInfo.Builder(JOB_ID, ComponentName(app, PBarPowerRecoveryJobService::class.java))
             .setPersisted(true)
-            .setPeriodic(PERIOD_MS)
+            .setPeriodic(BatteryRecoveryPolicy.FALLBACK_PERIOD_MS)
             .build()
         runCatching { scheduler.schedule(job) }
             .onFailure { AppLog.add("RECOVERY", "JOB_SCHEDULE_FAILED") }
@@ -69,14 +68,15 @@ internal object PBarPowerRecovery {
         if (!shouldRestore(context)) return false
         val app = context.applicationContext
         // Never rely on a persisted connection flag after an OEM kills the process.
-        if (!ProgressNotificationListener.isConnectedInProcess) {
+        val rebindRequested = if (!ProgressNotificationListener.isConnectedInProcess) {
             runCatching {
                 NotificationListenerService.requestRebind(ComponentName(app, ProgressNotificationListener::class.java))
-            }.onFailure { AppLog.add("RECOVERY", "LISTENER_REBIND_FAILED") }
-        }
-        PBarForegroundService.start(app)
+            }.onFailure { AppLog.add("RECOVERY", "LISTENER_REBIND_FAILED") }.isSuccess
+        } else false
+        val foregroundAccepted = PBarForegroundService.start(app)
         app.sendBroadcast(Intent(ProgressNotificationListener.ACTION_REFRESH).setPackage(app.packageName))
-        return true
+        // Accepted foreground launch, rebind, or an existing live notification listener.
+        return foregroundAccepted || rebindRequested || ProgressNotificationListener.isConnectedInProcess
     }
 }
 
@@ -84,7 +84,7 @@ class PBarPowerRecoveryJobService : JobService() {
     override fun onStartJob(params: JobParameters): Boolean {
         if (PBarPowerRecovery.shouldRestore(this)) {
             if (PBarPowerRecovery.restore(this)) AppLog.add("RECOVERY", "RESTORE_REQUESTED")
-            else AppLog.add("RECOVERY", "RESTORE_DEFERRED")
+            else AppLog.add("RECOVERY", "RESTORE_REJECTED")
         }
         return false
     }

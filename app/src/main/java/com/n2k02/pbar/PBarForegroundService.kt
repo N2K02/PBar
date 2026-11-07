@@ -22,7 +22,8 @@ class PBarForegroundService : Service() {
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (PBarPowerRecovery.shouldRestore(this@PBarForegroundService)) {
-                PBarPowerRecovery.restore(this@PBarForegroundService)
+                val accepted = PBarPowerRecovery.restore(this@PBarForegroundService)
+                AppLog.add("RECOVERY", if (accepted) "RESTORE_REQUESTED" else "RESTORE_REJECTED")
             }
         }
     }
@@ -106,10 +107,11 @@ class PBarForegroundService : Service() {
                 hasNotificationListenerAccess(context)
         }
 
-        fun start(context: Context) {
-            if (!isEligible(context)) return
+        fun start(context: Context): Boolean {
+            if (!isEligible(context)) return false
             val app = context.applicationContext
-            runCatching { app.startForegroundService(Intent(app, PBarForegroundService::class.java)) }
+            return runCatching { app.startForegroundService(Intent(app, PBarForegroundService::class.java)) }
+                .onFailure { AppLog.add("RECOVERY", "FOREGROUND_START_REJECTED") }.isSuccess
         }
 
         fun stop(context: Context) {

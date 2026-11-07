@@ -75,7 +75,7 @@ class ProgressNotificationListener : NotificationListenerService() {
                 action == Intent.ACTION_BATTERY_OKAY ||
                 action == PowerManager.ACTION_POWER_SAVE_MODE_CHANGED) {
                 if (!isQuitRequested() && PBarPowerRecovery.shouldRestore(this@ProgressNotificationListener)) {
-                    PBarForegroundService.start(this@ProgressNotificationListener)
+                    PBarPowerRecovery.restore(this@ProgressNotificationListener)
                     overlayController?.render()
                     requestRefresh()
                 }
@@ -134,6 +134,7 @@ class ProgressNotificationListener : NotificationListenerService() {
 
     /** Explicit Quit also unbinds the OS listener; no automatic reconnect. */
     private fun stopForQuit() {
+        PBarPowerRecovery.cancel(this)
         releaseResources()
         runCatching { requestUnbind() }
     }

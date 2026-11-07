@@ -26,8 +26,14 @@ class PBarPowerRecoveryContractTest {
         assertTrue(source("app/src/main/java/com/n2k02/pbar/ProgressNotificationListener.kt")
             .contains("isConnectedInProcess = false"))
         assertTrue(recovery.contains("Settings.canDrawOverlays(context)"))
+        assertTrue(recovery.contains("BatteryRecoveryPolicy.FALLBACK_PERIOD_MS"))
+        assertTrue(recovery.contains("foregroundAccepted || rebindRequested"))
         assertTrue(recovery.contains("PBarForegroundService.hasNotificationListenerAccess(context)"))
         assertTrue(main.contains("PBarPowerRecovery.cancel(this)"))
         assertTrue(manifest.contains("android.permission.BIND_JOB_SERVICE"))
+        val service = source("app/src/main/java/com/n2k02/pbar/PBarForegroundService.kt")
+        assertTrue(service.contains("fun start(context: Context): Boolean"))
+        assertTrue(service.contains("FOREGROUND_START_REJECTED"))
+        assertTrue(source("app/src/main/java/com/n2k02/pbar/ProgressNotificationListener.kt").contains("PBarPowerRecovery.cancel(this)"))
     }
 }
