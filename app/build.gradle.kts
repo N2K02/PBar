@@ -46,7 +46,7 @@ dependencies {
 
 dependencies {
     implementation("dev.n2k02:theme:0.1.5")
-        implementation("dev.n2k02:updater:0.1.30")
+        implementation("dev.n2k02:updater:0.1.32")
     testImplementation("junit:junit:4.13.2")
 }
 
