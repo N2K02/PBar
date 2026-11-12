@@ -37,7 +37,7 @@ dependencies {
     implementation("androidx.compose.ui:ui:1.9.0")
     implementation("androidx.compose.ui:ui-tooling-preview:1.9.0")
     implementation("androidx.compose.foundation:foundation:1.9.0")
-    implementation("androidx.compose.material3:material3:1.5.0-beta02")
+    implementation("androidx.compose.material3:material3:1.5.0-rc01")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
@@ -45,7 +45,7 @@ dependencies {
 }
 
 dependencies {
-    implementation("dev.n2k02:theme:0.1.5")
+    implementation("dev.n2k02:theme:0.1.14")
         implementation("dev.n2k02:updater:0.1.32")
     testImplementation("junit:junit:4.13.2")
 }
