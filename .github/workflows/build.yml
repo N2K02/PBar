@@ -10,6 +10,8 @@ on:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [closed]
   workflow_dispatch:
     inputs:
       version:
@@ -21,21 +23,23 @@ permissions:
   contents: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.number) || 'main' }}
   cancel-in-progress: true
 
 env:
   APP: PBar
+  BUILD_COMMIT: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || github.sha }}
 
 jobs:
   build:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'pull_request_target' || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository && !contains(github.event.pull_request.title, '[skip ci]')))
     runs-on: ubuntu-latest
     env:
       N2K02_PACKAGES_TOKEN: ${{ secrets.N2K02_PACKAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-java@v6
         with:
@@ -108,7 +112,7 @@ jobs:
             echo "### Install"
             echo "Download the signed APK below and install it on your Android device."
             echo
-            echo "_Built from ${GITHUB_SHA::7}_"
+            echo "_Built from ${BUILD_COMMIT::7}_"
           } > release-notes.md
       - name: Build and sign channel APK
         env:
@@ -144,7 +148,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.VERSION }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ env.BUILD_COMMIT }}
           name: PBar ${{ env.VERSION }}
           body_path: release-notes.md
           files: PBar-${{ env.VERSION }}.apk
