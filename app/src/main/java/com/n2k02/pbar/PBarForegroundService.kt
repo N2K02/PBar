@@ -78,7 +78,7 @@ class PBarForegroundService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
-        val notification = builder.setSmallIcon(R.drawable.ic_pbar_launcher)
+        val notification = builder.setSmallIcon(com.n2k02.pbar.R.drawable.ic_stat_app)
             .setContentTitle("PBar is active")
             .setContentText("Keeping the progress indicator available")
             .setContentIntent(pending).setOngoing(true).setOnlyAlertOnce(true).build()
