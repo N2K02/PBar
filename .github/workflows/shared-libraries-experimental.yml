@@ -27,3 +27,4 @@ jobs:
         with:
           name: PBar-experimental-shared-libraries
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
